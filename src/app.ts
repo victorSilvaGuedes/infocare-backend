@@ -1,23 +1,17 @@
 import express, { Express, Request, Response } from 'express'
 import cors from 'cors'
+import { errorHandler } from './middlewares/errorHandler'
+import pacienteRouter from './routes/paciente.routes'
 
-// Cria a instância do aplicativo Express
 const app: Express = express()
 
 // --- Middlewares Globais ---
-
-// 1. Habilita o CORS (Cross-Origin Resource Sharing)
-// Permite que seu frontend (em outro domínio) faça requisições para esta API
 app.use(cors())
-
-// 2. Parser de JSON
-// Habilita a API a entender requisições com body no formato JSON
 app.use(express.json())
 
 // --- Rotas ---
 
-// Rota "Health Check" (Verificação de Saúde)
-// Uma rota simples para verificar se a API está online
+// Rota "Health Check"
 app.get('/', (req: Request, res: Response) => {
 	res.status(200).json({
 		message: 'InfoCare API está online!',
@@ -25,10 +19,17 @@ app.get('/', (req: Request, res: Response) => {
 	})
 })
 
-// (Aqui é onde vamos plugar nossos roteadores, ex: app.use('/pacientes', ...))
+// Rotas da Aplicação
+app.use('/pacientes', pacienteRouter)
 
-// --- Tratamento de Erros ---
-// (Adicionaremos nosso middleware de erro global aqui)
+// (Adicione outras rotas aqui, ex: app.use('/api/v1/familiares', ...))
+
+// --- Tratamento de Erros (NOVO) ---
+//
+// ESTE DEVE SER O ÚLTIMO 'app.use()'
+// O Express sabe que ele é um errorHandler por causa dos 4 argumentos
+//
+app.use(errorHandler)
 
 // Exporta o 'app' para ser usado pelo 'server.ts'
 export { app }
