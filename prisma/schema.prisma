@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// --- Enums ---
+
+enum StatusAssociacao {
+  pendente
+  aprovada
+  rejeitada
+}
+
+enum StatusInternacao {
+  ATIVA    // Paciente está internado
+  ALTA     // Paciente recebeu alta
+}
+
+enum TipoProfissional {
+  MEDICO
+  ENFERMEIRO
+  OUTRO // Fisioterapeuta, etc.
+}
+
+// --- Modelos ---
+
+model Paciente {
+  id             Int      @id @default(autoincrement()) @map("id_paciente")
+  nome           String   @db.VarChar(255)
+  cpf            String   @unique @db.VarChar(14)
+  telefone       String?  @db.VarChar(20)
+  dataNascimento DateTime @map("data_nascimento") @db.Date
+  tipoSanguineo  String?  @map("tipo_sanguineo") @db.VarChar(5)
+
+  // Se um Paciente for deletado, todas as suas internações são deletadas em cascata.
+  internacoes Internacao[]
+
+  @@map("Pacientes")
+}
+
+model Familiar {
+  // ID vem do Supabase Auth (Segurança)
+  id       String  @id @db.Uuid
+  nome     String  @db.VarChar(255)
+  cpf      String  @unique @db.VarChar(14)
+  telefone String? @db.VarChar(20)
+  
+  // Se um Familiar for deletado, suas internações
+  // NÃO são deletadas (apenas o link se torna nulo).
+  internacoesResponsaveis Internacao[]
+  // Se um Familiar for deletado, suas associações
+  // pendentes/aprovadas são deletadas.
+  associacoesSolicitadas  Associacao[]
+
+  @@map("Familiares")
+}
+
+model ProfissionalSaude {
+  // ID vem do Supabase Auth (Segurança)
+  id            String  @id @db.Uuid
+  nome          String  @db.VarChar(255)
+  cpf           String  @unique @db.VarChar(14)
+  telefone      String? @db.VarChar(20)
+  crm           String? @unique @db.VarChar(20)
+  coren         String? @unique @db.VarChar(20)
+  especialidade String? @db.VarChar(100)
+  
+  // Campo de Tipo (Clareza de Lógica)
+  tipo          TipoProfissional @default(OUTRO) 
+
+  // Se um Profissional for deletado, suas evoluções
+  // NÃO são deletadas (o link se torna nulo).
+  evolucoes Evolucao[]
+
+  @@map("ProfissionaisSaude")
+}
+
+model Internacao {
+  id          Int       @id @default(autoincrement()) @map("id_internacao")
+  idPaciente  Int       @map("id_paciente")
+  idFamiliar  String?   @map("id_familiar") @db.Uuid // UUID do Familiar
+  dataInicio  DateTime  @default(now()) @map("data_inicio") @db.Timestamp()
+  dataAlta    DateTime? @map("data_alta") @db.Timestamp()
+  diagnostico String?   @db.Text
+  observacoes String?   @db.Text
+
+  // Campo de Status (Clareza de Lógica)
+  status      StatusInternacao @default(ATIVA)
+
+  // --- Relacionamentos e Integridade ---
+  paciente Paciente @relation(fields: [idPaciente], references: [id], onDelete: Cascade)
+  familiar Familiar? @relation(fields: [idFamiliar], references: [id], onDelete: SetNull)
+
+  evolucoes   Evolucao[]
+  associacoes Associacao[]
+
+  @@map("Internacoes")
+}
+
+model Evolucao {
+  id             Int      @id @default(autoincrement()) @map("id_evolucao")
+  idInternacao   Int      @map("id_internacao")
+  idProfissional String?  @map("id_profissional") @db.Uuid // UUID do Profissional
+  dataEvolucao   DateTime @default(now()) @map("data_evolucao") @db.Date
+  horario        DateTime @default(now()) @db.Time()
+  descricao      String   @db.Text
+
+  // --- Relacionamentos e Integridade ---
+  internacao Internacao @relation(fields: [idInternacao], references: [id], onDelete: Cascade)
+  profissional ProfissionalSaude? @relation(fields: [idProfissional], references: [id], onDelete: SetNull)
+
+  @@map("Evolucoes")
+}
+
+model Associacao {
+  id              Int              @id @default(autoincrement()) @map("id_associacao")
+  idFamiliar      String           @map("id_familiar") @db.Uuid // UUID do Familiar
+  idInternacao    Int              @map("id_internacao")
+  dataSolicitacao DateTime         @default(now()) @map("data_solicitacao") @db.Timestamp()
+  status          StatusAssociacao @default(pendente)
+
+  // --- Relacionamentos e Integridade ---
+  familiar Familiar @relation(fields: [idFamiliar], references: [id], onDelete: Cascade)
+  internacao Internacao @relation(fields: [idInternacao], references: [id], onDelete: Cascade)
+
+  @@map("Associacoes")
+}
