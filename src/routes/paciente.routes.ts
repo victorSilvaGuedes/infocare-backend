@@ -1,32 +1,27 @@
+// Atualize este arquivo: src/routes/paciente.routes.ts
+
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma'
+import { authMiddleware } from '../middlewares/authMiddleware' // 1. IMPORTAMOS O MIDDLEWARE
 
-// Schema para CRIAR um paciente (POST /)
+// --- SCHEMAS ZOD (Existentes) ---
+
 const createPacienteSchema = z.object({
-	nome: z
-		.string()
-		// Apenas customizamos o refinamento .min(), que sabemos que funciona
-		.min(3, { message: 'Nome deve ter no mínimo 3 caracteres.' }),
-
+	nome: z.string().min(3, { message: 'Nome deve ter no mínimo 3 caracteres.' }),
 	cpf: z
 		.string()
 		.length(14, { message: 'CPF deve estar no formato xxx.xxx.xxx-xx' }),
-
 	telefone: z.string().optional(),
-
-	dataNascimento: z.coerce.date(), // Deixamos a mensagem padrão
-
+	dataNascimento: z.coerce.date(),
 	tipoSanguineo: z.string().optional(),
 })
 
-// Schema para BUSCAR um paciente por ID (GET /:id)
 const getPacienteByIdSchema = z.object({
-	// Deixamos a mensagem padrão
 	id: z.coerce
 		.number()
-		.int({ message: 'ID deve ser um número inteiro.' })
+		.int()
 		.positive({ message: 'ID deve ser um número positivo.' }),
 })
 
@@ -38,25 +33,33 @@ const pacienteRouter = Router()
 /**
  * Rota: POST /
  * Descrição: Cadastra um novo paciente.
+ * (AGORA PROTEGIDA: Apenas para Profissionais)
  */
 pacienteRouter.post(
 	'/',
+	authMiddleware, // 2. ADICIONAMOS O MIDDLEWARE
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			// 1. Validar o body
+			// 3. Verificamos a Autorização (Permissão)
+			if (req.usuario?.tipo !== 'profissional') {
+				const error = new Error(
+					'Acesso negado: Rota apenas para profissionais.'
+				)
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+
+			// 4. Se passou, o resto da lógica continua igual
 			const validatedData = createPacienteSchema.parse(req.body)
 
-			// 2. Lógica de Banco (Criar)
 			const paciente = await prisma.paciente.create({
 				data: {
 					...validatedData,
 				},
 			})
 
-			// 3. Resposta
 			return res.status(201).json(paciente)
 		} catch (error: any) {
-			// 4. Tratamento de Erro (CPF duplicado)
 			if (error instanceof Prisma.PrismaClientKnownRequestError) {
 				if (
 					error.code === 'P2002' &&
@@ -68,7 +71,6 @@ pacienteRouter.post(
 					return next(cpfDuplicadoError)
 				}
 			}
-			// Envia outros erros (Zod, etc.) para o errorHandler
 			return next(error)
 		}
 	}
@@ -77,10 +79,12 @@ pacienteRouter.post(
 /**
  * Rota: GET /
  * Descrição: Lista todos os pacientes cadastrados.
+ * (Continua pública por enquanto)
  */
 pacienteRouter.get(
 	'/',
 	async (req: Request, res: Response, next: NextFunction) => {
+		// --- CÓDIGO QUE FALTAVA ---
 		try {
 			// 1. Lógica de Banco (Buscar Todos)
 			const pacientes = await prisma.paciente.findMany()
@@ -91,16 +95,19 @@ pacienteRouter.get(
 			// 3. Tratamento de Erro
 			return next(error)
 		}
+		// --- FIM DO CÓDIGO ---
 	}
 )
 
 /**
  * Rota: GET /:id
  * Descrição: Busca um paciente específico pelo seu ID.
+ * (Continua pública por enquanto)
  */
 pacienteRouter.get(
 	'/:id',
 	async (req: Request, res: Response, next: NextFunction) => {
+		// --- CÓDIGO QUE FALTAVA ---
 		try {
 			// 1. Validar os parâmetros da URL (req.params)
 			const { id } = getPacienteByIdSchema.parse(req.params)
@@ -125,6 +132,7 @@ pacienteRouter.get(
 			// 5. Tratamento de Erro (ID inválido do Zod, etc.)
 			return next(error)
 		}
+		// --- FIM DO CÓDIGO ---
 	}
 )
 
