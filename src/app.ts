@@ -1,10 +1,14 @@
 import express, { Express, Request, Response } from 'express'
 import cors from 'cors'
 import { errorHandler } from './middlewares/errorHandler'
-const app: Express = express()
+
 import pacienteRouter from './routes/paciente.routes'
 import familiarRouter from './routes/familiar.routes'
 import profissionalRouter from './routes/profissional.routes'
+import internacaoRouter from './routes/internacao.routes'
+import evolucaoRouter from './routes/evolucao.routes'
+
+const app: Express = express()
 
 // --- Middlewares Globais ---
 app.use(cors())
@@ -24,8 +28,8 @@ app.get('/', (req: Request, res: Response) => {
 app.use('/pacientes', pacienteRouter)
 app.use('/familiares', familiarRouter)
 app.use('/profissionais', profissionalRouter)
-
-// (Adicione outras rotas aqui, ex: app.use('/api/v1/familiares', ...))
+app.use('/internacoes', internacaoRouter)
+app.use('/evolucao', evolucaoRouter)
 
 // --- Tratamento de Erros (NOVO) ---
 //

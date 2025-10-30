@@ -6,7 +6,7 @@ import { app } from './app'
 
 // 2. Define a porta da API
 // Busca a variável 'PORT' no .env ou usa 3001 como padrão
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT || 3333
 
 // 3. Inicia o servidor
 app.listen(PORT, () => {
