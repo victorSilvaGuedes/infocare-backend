@@ -6,6 +6,7 @@
 		"lib": ["ES2020"], // Bibliotecas padrão do JS a incluir
 		"esModuleInterop": true, // Permite compatibilidade entre 'require' e 'import'
 		"forceConsistentCasingInFileNames": true, // Garante que os nomes dos ficheiros sejam consistentes
+		"resolveJsonModule": true,
 
 		/* ----- Caminhos de Saída e Raiz ----- */
 		"rootDir": "./src", // Onde o seu código TypeScript (.ts) vive

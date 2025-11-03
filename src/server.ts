@@ -10,5 +10,7 @@ const PORT = process.env.PORT || 3333
 
 // 3. Inicia o servidor
 app.listen(PORT, () => {
-	console.log(`InfoCare API rodando em: http://localhost:${PORT} 🏥🖥️`)
+	console.log(
+		`InfoCare API rodando em: http://localhost:${PORT} 🏥🖥️\nDocumentação em http://localhost:${PORT}/api-docs`
+	)
 })
