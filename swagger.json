@@ -1,0 +1,674 @@
+{
+	"openapi": "3.0.0",
+	"info": {
+		"title": "InfoCare API",
+		"version": "1.0.0",
+		"description": "Documentação da API InfoCare para gestão de internações e comunicação."
+	},
+	"servers": [
+		{
+			"url": "http://localhost:3333",
+			"description": "Servidor de Desenvolvimento"
+		}
+	],
+	"tags": [
+		{
+			"name": "Familiares",
+			"description": "Autenticação e gestão de Familiares"
+		},
+		{
+			"name": "Profissionais",
+			"description": "Autenticação e gestão de Profissionais de Saúde"
+		},
+		{
+			"name": "Pacientes",
+			"description": "Gestão de Pacientes (CRUD por Profissionais)"
+		},
+		{
+			"name": "Internações",
+			"description": "Gestão de Internações e Evoluções"
+		},
+		{
+			"name": "Associações",
+			"description": "Gestão de pedidos de associação Familiar-Internação"
+		}
+	],
+	"paths": {
+		"/familiares": {
+			"post": {
+				"tags": ["Familiares"],
+				"summary": "Regista um novo Familiar",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/FamiliarCreatePayload" }
+						}
+					}
+				},
+				"responses": {
+					"201": { "description": "Familiar criado" },
+					"409": { "description": "CPF ou Email já existe" }
+				}
+			}
+		},
+		"/familiares/login": {
+			"post": {
+				"tags": ["Familiares"],
+				"summary": "Login do Familiar",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/LoginPayload" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Login bem-sucedido",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/LoginResponse" }
+							}
+						}
+					},
+					"401": { "description": "Credenciais inválidas" }
+				}
+			}
+		},
+		"/familiares/me": {
+			"get": {
+				"tags": ["Familiares"],
+				"summary": "Busca o perfil do Familiar logado (🔒 Familiar)",
+				"security": [{ "bearerAuth": [] }],
+				"responses": {
+					"200": { "description": "Dados do familiar" },
+					"401": { "description": "Não autenticado" },
+					"403": { "description": "Não é um familiar" }
+				}
+			},
+			"put": {
+				"tags": ["Familiares"],
+				"summary": "Atualiza o perfil do Familiar logado (🔒 Familiar)",
+				"security": [{ "bearerAuth": [] }],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/FamiliarUpdatePayload" }
+						}
+					}
+				},
+				"responses": {
+					"200": { "description": "Perfil atualizado" },
+					"401": { "description": "Não autenticado" }
+				}
+			},
+			"delete": {
+				"tags": ["Familiares"],
+				"summary": "Apaga a conta do Familiar logado (🔒 Familiar)",
+				"security": [{ "bearerAuth": [] }],
+				"responses": {
+					"200": { "description": "Conta apagada" },
+					"401": { "description": "Não autenticado" }
+				}
+			}
+		},
+		"/profissionais": {
+			"post": {
+				"tags": ["Profissionais"],
+				"summary": "Regista um novo Profissional de Saúde",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ProfissionalCreatePayload"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": { "description": "Profissional criado" },
+					"409": { "description": "CPF, Email, CRM ou Coren já existe" }
+				}
+			}
+		},
+		"/profissionais/login": {
+			"post": {
+				"tags": ["Profissionais"],
+				"summary": "Login do Profissional de Saúde",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/LoginPayload" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Login bem-sucedido",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/LoginResponse" }
+							}
+						}
+					},
+					"401": { "description": "Credenciais inválidas" }
+				}
+			}
+		},
+		"/profissionais/me": {
+			"get": {
+				"tags": ["Profissionais"],
+				"summary": "Busca o perfil do Profissional logado (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"responses": {
+					"200": { "description": "Dados do profissional" },
+					"401": { "description": "Não autenticado" },
+					"403": { "description": "Não é um profissional" }
+				}
+			},
+			"put": {
+				"tags": ["Profissionais"],
+				"summary": "Atualiza o perfil do Profissional logado (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ProfissionalUpdatePayload"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": { "description": "Perfil atualizado" },
+					"401": { "description": "Não autenticado" }
+				}
+			},
+			"delete": {
+				"tags": ["Profissionais"],
+				"summary": "Apaga a conta do Profissional logado (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"responses": {
+					"200": { "description": "Conta apagada" },
+					"401": { "description": "Não autenticado" }
+				}
+			}
+		},
+		"/pacientes": {
+			"get": {
+				"tags": ["Pacientes"],
+				"summary": "Lista todos os pacientes (Público)",
+				"responses": { "200": { "description": "Lista de pacientes" } }
+			},
+			"post": {
+				"tags": ["Pacientes"],
+				"summary": "Cadastra um novo paciente (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/PacientePayload" }
+						}
+					}
+				},
+				"responses": {
+					"201": { "description": "Paciente criado" },
+					"401": { "description": "Não autenticado" },
+					"403": { "description": "Acesso negado" },
+					"409": { "description": "CPF já existe" }
+				}
+			}
+		},
+		"/pacientes/{id}": {
+			"get": {
+				"tags": ["Pacientes"],
+				"summary": "Busca um paciente por ID (Público)",
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"responses": {
+					"200": { "description": "Dados do paciente" },
+					"404": { "description": "Paciente não encontrado" }
+				}
+			},
+			"put": {
+				"tags": ["Pacientes"],
+				"summary": "Atualiza um paciente (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/PacientePayload" }
+						}
+					}
+				},
+				"responses": {
+					"200": { "description": "Paciente atualizado" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Paciente não encontrado" }
+				}
+			},
+			"delete": {
+				"tags": ["Pacientes"],
+				"summary": "Apaga um paciente e seu histórico (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"responses": {
+					"200": { "description": "Paciente apagado" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Paciente não encontrado" }
+				}
+			}
+		},
+		"/internacoes": {
+			"get": {
+				"tags": ["Internações"],
+				"summary": "Lista todas as internações (Público)",
+				"parameters": [
+					{
+						"name": "status",
+						"in": "query",
+						"schema": { "type": "string", "enum": ["ATIVA", "ALTA"] }
+					}
+				],
+				"responses": { "200": { "description": "Lista de internações" } }
+			},
+			"post": {
+				"tags": ["Internações"],
+				"summary": "Cria uma nova internação (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/InternacaoCreatePayload"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": { "description": "Internação criada" },
+					"401": { "description": "Não autenticado" },
+					"404": {
+						"description": "Paciente/Familiar/Profissional não encontrado"
+					}
+				}
+			}
+		},
+		"/internacoes/{id}": {
+			"get": {
+				"tags": ["Internações"],
+				"summary": "Busca detalhes de uma internação (🔒 Profissional ou Familiar Aprovado)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"responses": {
+					"200": { "description": "Detalhes da internação" },
+					"401": { "description": "Não autenticado" },
+					"403": { "description": "Acesso negado" },
+					"404": { "description": "Internação não encontrada" }
+				}
+			},
+			"put": {
+				"tags": ["Internações"],
+				"summary": "Atualiza dados de uma internação (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/InternacaoUpdatePayload"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": { "description": "Internação atualizada" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Internação não encontrada" }
+				}
+			},
+			"delete": {
+				"tags": ["Internações"],
+				"summary": "Apaga uma internação (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"responses": {
+					"200": { "description": "Internação apagada" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Internação não encontrada" }
+				}
+			}
+		},
+		"/internacoes/{id}/alta": {
+			"put": {
+				"tags": ["Internações"],
+				"summary": "Finaliza (dá alta) a uma internação (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"responses": {
+					"200": { "description": "Internação finalizada" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Internação não encontrada" }
+				}
+			}
+		},
+		"/evolucoes": {
+			"post": {
+				"tags": ["Internações"],
+				"summary": "Adiciona uma nova evolução a uma internação (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/EvolucaoPayload" }
+						}
+					}
+				},
+				"responses": {
+					"201": { "description": "Evolução criada" },
+					"400": { "description": "Internação já recebeu alta" },
+					"401": { "description": "Não autenticado" }
+				}
+			}
+		},
+		"/evolucoes/{id}": {
+			"delete": {
+				"tags": ["Internações"],
+				"summary": "Apaga uma evolução (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"responses": {
+					"200": { "description": "Evolução apagada" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Evolução não encontrada" }
+				}
+			}
+		},
+		"/associacoes": {
+			"get": {
+				"tags": ["Associações"],
+				"summary": "Lista pedidos de associação (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "status",
+						"in": "query",
+						"schema": {
+							"type": "string",
+							"enum": ["pendente", "aprovada", "rejeitada"]
+						}
+					}
+				],
+				"responses": {
+					"200": { "description": "Lista de associações" },
+					"401": { "description": "Não autenticado" }
+				}
+			},
+			"post": {
+				"tags": ["Associações"],
+				"summary": "Familiar solicita associação a uma internação (🔒 Familiar)",
+				"security": [{ "bearerAuth": [] }],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/AssociacaoPayload" }
+						}
+					}
+				},
+				"responses": {
+					"201": { "description": "Solicitação criada" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Internação não encontrada" }
+				}
+			}
+		},
+		"/associacoes/{id}/aprovar": {
+			"put": {
+				"tags": ["Associações"],
+				"summary": "Aprova uma solicitação de associação (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"responses": {
+					"200": { "description": "Solicitação aprovada" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Solicitação não encontrada" }
+				}
+			}
+		},
+		"/associacoes/{id}/rejeitar": {
+			"put": {
+				"tags": ["Associações"],
+				"summary": "Rejeita uma solicitação de associação (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"responses": {
+					"200": { "description": "Solicitação rejeitada" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Solicitação não encontrada" }
+				}
+			}
+		},
+		"/associacoes/{id}": {
+			"delete": {
+				"tags": ["Associações"],
+				"summary": "Apaga uma solicitação de associação (🔒 Profissional)",
+				"security": [{ "bearerAuth": [] }],
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "integer" }
+					}
+				],
+				"responses": {
+					"200": { "description": "Solicitação apagada" },
+					"401": { "description": "Não autenticado" },
+					"404": { "description": "Solicitação não encontrada" }
+				}
+			}
+		}
+	},
+	"components": {
+		"securitySchemes": {
+			"bearerAuth": {
+				"type": "http",
+				"scheme": "bearer",
+				"bearerFormat": "JWT",
+				"description": "Token JWT obtido no login"
+			}
+		},
+		"schemas": {
+			"LoginPayload": {
+				"type": "object",
+				"properties": {
+					"email": { "type": "string", "example": "usuario@email.com" },
+					"senha": { "type": "string", "example": "senha123" }
+				}
+			},
+			"LoginResponse": {
+				"type": "object",
+				"properties": {
+					"message": { "type": "string" },
+					"token": { "type": "string" },
+					"usuario": { "type": "object" }
+				}
+			},
+			"FamiliarCreatePayload": {
+				"type": "object",
+				"properties": {
+					"nome": { "type": "string", "example": "Ana Souza" },
+					"cpf": { "type": "string", "example": "123.456.789-00" },
+					"email": { "type": "string", "example": "ana.souza@email.com" },
+					"senha": { "type": "string", "example": "senha123456" },
+					"telefone": { "type": "string", "example": "+5516999998888" }
+				}
+			},
+			"FamiliarUpdatePayload": {
+				"type": "object",
+				"properties": {
+					"nome": { "type": "string" },
+					"email": { "type": "string" },
+					"telefone": { "type": "string" }
+				}
+			},
+			"ProfissionalCreatePayload": {
+				"type": "object",
+				"properties": {
+					"nome": { "type": "string", "example": "Dr. Mario Paiva" },
+					"cpf": { "type": "string", "example": "111.222.333-44" },
+					"email": { "type": "string", "example": "mario.paiva@hospital.com" },
+					"senha": { "type": "string", "example": "medicosenha123" },
+					"tipo": {
+						"type": "string",
+						"enum": ["MEDICO", "ENFERMEIRO", "OUTRO"],
+						"example": "MEDICO"
+					},
+					"crm": { "type": "string", "example": "12345-SP" },
+					"especialidade": { "type": "string", "example": "Cardiologista" }
+				}
+			},
+			"ProfissionalUpdatePayload": {
+				"type": "object",
+				"properties": {
+					"nome": { "type": "string" },
+					"email": { "type": "string" },
+					"telefone": { "type": "string" },
+					"especialidade": { "type": "string" }
+				}
+			},
+			"PacientePayload": {
+				"type": "object",
+				"properties": {
+					"nome": { "type": "string", "example": "Carlos Mendes" },
+					"cpf": { "type": "string", "example": "456.789.123-01" },
+					"telefone": { "type": "string", "example": "16999998888" },
+					"dataNascimento": {
+						"type": "string",
+						"format": "date",
+						"example": "1985-07-20"
+					},
+					"tipoSanguineo": { "type": "string", "example": "A+" }
+				}
+			},
+			"InternacaoCreatePayload": {
+				"type": "object",
+				"properties": {
+					"idPaciente": { "type": "integer" },
+					"idFamiliar": { "type": "integer" },
+					"idProfissionalResponsavel": { "type": "integer" },
+					"diagnostico": { "type": "string" },
+					"observacoes": { "type": "string" },
+					"quarto": { "type": "string" },
+					"leito": { "type": "string" }
+				}
+			},
+			"InternacaoUpdatePayload": {
+				"type": "object",
+				"properties": {
+					"idFamiliar": { "type": "integer" },
+					"idProfissionalResponsavel": { "type": "integer" },
+					"diagnostico": { "type": "string" },
+					"observacoes": { "type": "string" },
+					"quarto": { "type": "string" },
+					"leito": { "type": "string" }
+				}
+			},
+			"EvolucaoPayload": {
+				"type": "object",
+				"properties": {
+					"idInternacao": { "type": "integer" },
+					"descricao": { "type": "string" }
+				}
+			},
+			"AssociacaoPayload": {
+				"type": "object",
+				"properties": {
+					"idInternacao": { "type": "integer" }
+				}
+			}
+		}
+	}
+}

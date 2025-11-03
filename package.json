@@ -18,6 +18,8 @@
 		"dotenv": "^17.2.3",
 		"express": "^5.1.0",
 		"jsonwebtoken": "^9.0.2",
+		"swagger-jsdoc": "^6.2.8",
+		"swagger-ui-express": "^5.0.1",
 		"twilio": "^5.10.4",
 		"zod": "^4.1.12"
 	},
@@ -27,6 +29,7 @@
 		"@types/express": "^5.0.5",
 		"@types/jsonwebtoken": "^9.0.10",
 		"@types/node": "^24.9.2",
+		"@types/swagger-ui-express": "^4.1.8",
 		"prisma": "^6.18.0",
 		"tsx": "^4.20.6",
 		"typescript": "^5.9.3"
