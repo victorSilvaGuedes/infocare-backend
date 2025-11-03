@@ -18,6 +18,8 @@ const createPacienteSchema = z.object({
 	tipoSanguineo: z.string().optional(),
 })
 
+const updatePacienteSchema = createPacienteSchema.partial()
+
 const getPacienteByIdSchema = z.object({
 	id: z.coerce
 		.number()
@@ -133,6 +135,109 @@ pacienteRouter.get(
 			return next(error)
 		}
 		// --- FIM DO CÓDIGO ---
+	}
+)
+
+/**
+ * (NOVA ROTA)
+ * Rota: PUT /:id
+ * Descrição: Profissional (logado) atualiza os dados de um Paciente.
+ * (PROTEGIDA: Apenas para Profissionais)
+ */
+pacienteRouter.put(
+	'/:id',
+	authMiddleware, // 1. Protegemos a rota
+	async (req: Request, res: Response, next: NextFunction) => {
+		try {
+			// 2. Verificamos se é um Profissional
+			if (req.usuario?.tipo !== 'profissional') {
+				const error = new Error(
+					'Acesso negado: Rota apenas para profissionais.'
+				)
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+
+			// 3. Validamos o ID do Paciente (da URL)
+			const { id } = getPacienteByIdSchema.parse(req.params)
+
+			// 4. Validamos os dados do body
+			const validatedData = updatePacienteSchema.parse(req.body)
+
+			// 5. Garantimos que não enviou um body vazio
+			if (Object.keys(validatedData).length === 0) {
+				return res.status(400).json({
+					status: 'error',
+					message: 'Nenhum dado fornecido para atualização.',
+				})
+			}
+
+			// 6. Lógica de Banco (Atualizar)
+			const pacienteAtualizado = await prisma.paciente.update({
+				where: { id: id },
+				data: validatedData,
+			})
+
+			// 7. Resposta
+			return res.status(200).json(pacienteAtualizado)
+		} catch (error: any) {
+			// P2025: Paciente não encontrado com o ID
+			if (
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				error.code === 'P2025'
+			) {
+				return next(new Error('Paciente não encontrado.'))
+			}
+			// P2002: CPF duplicado
+			return next(error)
+		}
+	}
+)
+
+/**
+ * (NOVA ROTA)
+ * Rota: DELETE /:id
+ * Descrição: Profissional (logado) APAGA um Paciente.
+ * (PROTEGIDA: Apenas para Profissionais)
+ * (PERIGO: Esta ação é EM CASCATA)
+ */
+pacienteRouter.delete(
+	'/:id',
+	authMiddleware, // 1. Protegemos a rota
+	async (req: Request, res: Response, next: NextFunction) => {
+		try {
+			// 2. Verificamos se é um Profissional
+			if (req.usuario?.tipo !== 'profissional') {
+				const error = new Error(
+					'Acesso negado: Rota apenas para profissionais.'
+				)
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+
+			// 3. Validamos o ID do Paciente (da URL)
+			const { id } = getPacienteByIdSchema.parse(req.params)
+
+			// 4. Lógica de Banco (Apagar)
+			await prisma.paciente.delete({
+				where: { id: id },
+			})
+
+			// 5. Resposta (200 OK é comum, 204 No Content também)
+			return res.status(200).json({
+				status: 'sucesso',
+				message:
+					'Paciente e todo o seu histórico (internações, evoluções) foram apagados.',
+			})
+		} catch (error: any) {
+			if (
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				error.code === 'P2025'
+			) {
+				return next(new Error('Paciente não encontrado.'))
+			}
+			return next(error)
+		}
 	}
 )
 

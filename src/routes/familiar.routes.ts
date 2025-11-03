@@ -31,6 +31,18 @@ const createFamiliarSchema = z.object({
 		.optional(),
 })
 
+// Schema para ATUALIZAR um familiar (PUT /:id)
+const updateFamiliarSchema = z.object({
+	nome: z.string().min(3).optional(),
+	email: z.email().optional(),
+	// Permite 'string' vazia ou formato E.164
+	telefone: z
+		.string()
+		.regex(/^\+\d{1,3}\d{10,14}$/)
+		.optional()
+		.or(z.literal('')),
+})
+
 // Schema para BUSCAR um familiar por ID (GET /:id)
 const getFamiliarByIdSchema = z.object({
 	id: z.coerce
@@ -229,6 +241,98 @@ familiarRouter.get(
 			}
 			return res.status(200).json(familiar)
 		} catch (error: any) {
+			return next(error)
+		}
+	}
+)
+
+/**
+ * (NOVA ROTA)
+ * Rota: PUT /me
+ * Descrição: Familiar (logado) atualiza os seus PRÓPRIOS dados.
+ * (PROTEGIDA: Apenas para Familiares)
+ */
+familiarRouter.put(
+	'/me',
+	authMiddleware, // 1. Protegemos a rota
+	async (req: Request, res: Response, next: NextFunction) => {
+		try {
+			// 2. Verificamos se é um Familiar
+			if (req.usuario?.tipo !== 'familiar') {
+				const error = new Error('Acesso negado: Rota apenas para familiares.')
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+
+			// 3. Pegamos o ID do Familiar (do token)
+			const idFamiliarLogado = req.usuario.sub
+
+			// 4. Validamos os dados do body
+			const validatedData = updateFamiliarSchema.parse(req.body)
+
+			// 5. Garantimos que não enviou um body vazio
+			if (Object.keys(validatedData).length === 0) {
+				return res.status(400).json({
+					status: 'error',
+					message: 'Nenhum dado fornecido para atualização.',
+				})
+			}
+
+			// 6. Lógica de Banco (Atualizar)
+			const familiarAtualizado = await prisma.familiar.update({
+				where: { id: idFamiliarLogado },
+				data: validatedData, // Envia (ex: { nome: "Novo Nome" })
+				select: familiarSelect, // Retorna os dados seguros (sem senha)
+			})
+
+			// 7. Resposta
+			return res.status(200).json(familiarAtualizado)
+		} catch (error: any) {
+			// O errorHandler já trata erros P2002 (email/cpf duplicado)
+			return next(error)
+		}
+	}
+)
+
+/**
+ * (NOVA ROTA)
+ * Rota: DELETE /me
+ * Descrição: Familiar (logado) APAGA a sua própria conta.
+ * (PROTEGIDA: Apenas para Familiares)
+ */
+familiarRouter.delete(
+	'/me',
+	authMiddleware, // 1. Protegemos
+	async (req: Request, res: Response, next: NextFunction) => {
+		try {
+			// 2. Verificamos se é um Familiar
+			if (req.usuario?.tipo !== 'familiar') {
+				const error = new Error('Acesso negado: Rota apenas para familiares.')
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+
+			// 3. Pegamos o ID do Familiar (do token)
+			const idFamiliarLogado = req.usuario.sub
+
+			// 4. Lógica de Banco (Apagar)
+			await prisma.familiar.delete({
+				where: { id: idFamiliarLogado },
+			})
+
+			// 5. Resposta
+			return res.status(200).json({
+				status: 'sucesso',
+				message: 'Conta de familiar apagada.',
+			})
+		} catch (error: any) {
+			// P2025: Familiar já foi apagado ou não existe
+			if (
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				error.code === 'P2025'
+			) {
+				return next(new Error('Conta de familiar não encontrada.'))
+			}
 			return next(error)
 		}
 	}

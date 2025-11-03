@@ -29,6 +29,14 @@ const createProfissionalSchema = z.object({
 	tipo: z.nativeEnum(TipoProfissional).default(TipoProfissional.OUTRO), // Valida contra o Enum
 })
 
+// Schema para ATUALIZAR um Profissional (PUT /:id)
+const updateProfissionalSchema = z.object({
+	nome: z.string().min(3).optional(),
+	email: z.email().optional(),
+	telefone: z.string().optional().or(z.literal('')),
+	especialidade: z.string().optional(),
+})
+
 // Schema para LOGIN (Idêntico ao do Familiar)
 const loginSchema = z.object({
 	email: z.email({ message: 'Email inválido.' }),
@@ -189,6 +197,102 @@ profissionalRouter.get(
 
 			return res.status(200).json(profissional)
 		} catch (error: any) {
+			return next(error)
+		}
+	}
+)
+
+/**
+ * (NOVA ROTA)
+ * Rota: PUT /me
+ * Descrição: Profissional (logado) atualiza os seus PRÓPRIOS dados.
+ * (PROTEGIDA: Apenas para Profissionais)
+ */
+profissionalRouter.put(
+	'/me',
+	authMiddleware, // 1. Protegemos a rota
+	async (req: Request, res: Response, next: NextFunction) => {
+		try {
+			// 2. Verificamos se é um Profissional
+			if (req.usuario?.tipo !== 'profissional') {
+				const error = new Error(
+					'Acesso negado: Rota apenas para profissionais.'
+				)
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+
+			// 3. Pegamos o ID do Profissional (do token)
+			const idProfissionalLogado = req.usuario.sub
+
+			// 4. Validamos os dados do body
+			const validatedData = updateProfissionalSchema.parse(req.body)
+
+			// 5. Garantimos que não enviou um body vazio
+			if (Object.keys(validatedData).length === 0) {
+				return res.status(400).json({
+					status: 'error',
+					message: 'Nenhum dado fornecido para atualização.',
+				})
+			}
+
+			// 6. Lógica de Banco (Atualizar)
+			const profissionalAtualizado = await prisma.profissionalSaude.update({
+				where: { id: idProfissionalLogado },
+				data: validatedData,
+				select: profissionalSelect, // Retorna os dados seguros (sem senha)
+			})
+
+			// 7. Resposta
+			return res.status(200).json(profissionalAtualizado)
+		} catch (error: any) {
+			// O errorHandler já trata erros P2002 (email/cpf duplicado)
+			return next(error)
+		}
+	}
+)
+
+/**
+ * (NOVA ROTA)
+ * Rota: DELETE /me
+ * Descrição: Profissional (logado) APAGA a sua própria conta.
+ * (PROTEGIDA: Apenas para Profissionais)
+ */
+profissionalRouter.delete(
+	'/me',
+	authMiddleware, // 1. Protegemos
+	async (req: Request, res: Response, next: NextFunction) => {
+		try {
+			// 2. Verificamos se é um Profissional
+			if (req.usuario?.tipo !== 'profissional') {
+				const error = new Error(
+					'Acesso negado: Rota apenas para profissionais.'
+				)
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+
+			// 3. Pegamos o ID do Profissional (do token)
+			const idProfissionalLogado = req.usuario.sub
+
+			// 4. Lógica de Banco (Apagar)
+			await prisma.profissionalSaude.delete({
+				where: { id: idProfissionalLogado },
+			})
+
+			// 5. Resposta
+			return res.status(200).json({
+				status: 'sucesso',
+				message: 'Conta de profissional apagada.',
+			})
+		} catch (error: any) {
+			// P2025: Profissional já foi apagado ou não existe
+			if (
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				error.code === 'P2025'
+			) {
+				return next(new Error('Conta de profissional não encontrada.'))
+			}
 			return next(error)
 		}
 	}
