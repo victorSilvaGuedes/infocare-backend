@@ -1,14 +1,15 @@
 // Salve este arquivo como: src/routes/associacao.routes.ts
+// (Versão ATUALIZADA - Com nome do Paciente nos e-mails)
 
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { Prisma, StatusAssociacao } from '@prisma/client'
 import prisma from '../lib/prisma'
 import { authMiddleware } from '../middlewares/authMiddleware'
+import { sendEmail } from '../services/email.service' // Importa o serviço de e-mail
 
 // --- SCHEMAS ZOD ---
 
-// Schema para o Familiar SOLICITAR uma associação
 const createAssociacaoSchema = z.object({
 	idInternacao: z
 		.number()
@@ -16,13 +17,10 @@ const createAssociacaoSchema = z.object({
 		.positive({ message: 'ID da Internação é obrigatório.' }),
 })
 
-// Schema para o Profissional LISTAR associações
 const getAssociacoesSchema = z.object({
-	// Permite filtrar por status, ex: /associacoes?status=pendente
 	status: z.nativeEnum(StatusAssociacao).optional(),
 })
 
-// Schema para ID na URL
 const getAssociacaoByIdSchema = z.object({
 	id: z.coerce.number().int().positive(),
 })
@@ -35,27 +33,21 @@ const associacaoRouter = Router()
 /**
  * Rota: POST /
  * Descrição: Familiar (logado) solicita associação com uma internação.
- * (PROTEGIDA: Apenas para Familiares)
  */
 associacaoRouter.post(
 	'/',
-	authMiddleware, // 1. Rota protegida
+	authMiddleware,
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			// 2. Verificamos se quem está logado é um FAMILIAR
 			if (req.usuario?.tipo !== 'familiar') {
 				const error = new Error('Acesso negado: Rota apenas para familiares.')
 				;(error as any).statusCode = 403
 				return next(error)
 			}
 
-			// 3. Pegamos o ID do Familiar (do token)
 			const idFamiliarLogado = req.usuario.sub
-
-			// 4. Validamos o body (o idInternacao que ele quer ver)
 			const { idInternacao } = createAssociacaoSchema.parse(req.body)
 
-			// 5. [Extra] Verificar se ele já não solicitou
 			const jaExiste = await prisma.associacao.findFirst({
 				where: {
 					idFamiliar: idFamiliarLogado,
@@ -71,21 +63,48 @@ associacaoRouter.post(
 				)
 			}
 
-			// 6. Lógica de Banco (Criar o pedido)
 			const novaAssociacao = await prisma.associacao.create({
 				data: {
-					idFamiliar: idFamiliarLogado, // ID do token
-					idInternacao: idInternacao, // ID do body
-					status: 'pendente', // Padrão
+					idFamiliar: idFamiliarLogado,
+					idInternacao: idInternacao,
+					status: 'pendente',
 				},
 			})
 
-			// 7. Resposta
-			return res.status(201).json(novaAssociacao)
+			// Resposta imediata para o usuário
+			res.status(201).json(novaAssociacao)
+
+			// (NOVO) Enviar e-mail (com nome do paciente)
+			try {
+				const familiar = await prisma.familiar.findUnique({
+					where: { id: idFamiliarLogado },
+					select: { email: true, nome: true },
+				})
+
+				// (NOVO) Busca a internação para pegar o nome do paciente
+				const internacao = await prisma.internacao.findUnique({
+					where: { id: idInternacao },
+					include: { paciente: { select: { nome: true } } },
+				})
+
+				const nomePaciente = internacao?.paciente?.nome || 'paciente'
+
+				if (familiar && familiar.email) {
+					sendEmail({
+						to: familiar.email,
+						subject: `[InfoCare] Solicitação de acesso para ${nomePaciente}`,
+						html: `Olá, ${familiar.nome}.<br>Sua solicitação de acesso à internação do paciente <b>${nomePaciente}</b> foi registrada e está <b>pendente</b> de aprovação.`,
+					})
+				}
+			} catch (emailError: any) {
+				console.error(
+					'[Email] Falha ao enviar e-mail de solicitação:',
+					emailError.message
+				)
+			}
 		} catch (error: any) {
 			if (error instanceof Prisma.PrismaClientKnownRequestError) {
 				if (error.code === 'P2003') {
-					// Foreign key constraint failed
 					return next(
 						new Error('Internação não encontrada com o ID fornecido.')
 					)
@@ -98,15 +117,13 @@ associacaoRouter.post(
 
 /**
  * Rota: GET /
- * Descrição: Lista todas as solicitações de associação.
- * (PROTEGIDA: Apenas para Profissionais - para eles poderem aprovar)
+ * Descrição: Lista todas as solicitações de associação (Apenas Profissionais).
  */
 associacaoRouter.get(
 	'/',
-	authMiddleware, // 1. Rota protegida
+	authMiddleware,
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			// 2. Verificamos se quem está logado é um PROFISSIONAL
 			if (req.usuario?.tipo !== 'profissional') {
 				const error = new Error(
 					'Acesso negado: Rota apenas para profissionais.'
@@ -115,17 +132,15 @@ associacaoRouter.get(
 				return next(error)
 			}
 
-			// 3. Validamos os query params (ex: ?status=pendente)
 			const { status } = getAssociacoesSchema.parse(req.query)
 
-			// 4. Lógica de Banco (Buscar Solicitações)
 			const associacoes = await prisma.associacao.findMany({
 				where: {
-					status: status, // Filtra por status (ex: PENDENTE)
+					status: status,
 				},
 				include: {
 					familiar: {
-						select: { nome: true, email: true },
+						select: { id: true, nome: true, email: true },
 					},
 					internacao: {
 						select: {
@@ -135,11 +150,10 @@ associacaoRouter.get(
 					},
 				},
 				orderBy: {
-					dataSolicitacao: 'asc', // Mais antigas primeiro
+					dataSolicitacao: 'asc',
 				},
 			})
 
-			// 5. Resposta
 			return res.status(200).json(associacoes)
 		} catch (error: any) {
 			return next(error)
@@ -148,17 +162,14 @@ associacaoRouter.get(
 )
 
 /**
- * (NOVA ROTA)
  * Rota: PUT /:id/aprovar
- * Descrição: Profissional (logado) APROVA uma solicitação de associação.
- * (PROTEGIDA: Apenas para Profissionais)
+ * Descrição: Profissional (logado) APROVA uma solicitação.
  */
 associacaoRouter.put(
 	'/:id/aprovar',
-	authMiddleware, // 1. Rota protegida
+	authMiddleware,
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			// 2. Verificamos se é um Profissional
 			if (req.usuario?.tipo !== 'profissional') {
 				const error = new Error(
 					'Acesso negado: Rota apenas para profissionais.'
@@ -167,23 +178,52 @@ associacaoRouter.put(
 				return next(error)
 			}
 
-			// 3. Validamos o ID da associação (da URL)
 			const { id } = getAssociacaoByIdSchema.parse(req.params)
 
-			// 4. Lógica de Banco (Atualizar)
 			const associacaoAprovada = await prisma.associacao.update({
 				where: { id: id },
 				data: {
-					status: 'aprovada', // MUDAMOS O STATUS
+					status: 'aprovada',
 				},
 			})
 
-			// 5. Resposta
-			return res.status(200).json(associacaoAprovada)
+			// Resposta imediata
+			res.status(200).json(associacaoAprovada)
+
+			// (NOVO) Enviar e-mail (com nome do paciente)
+			try {
+				const associacao = await prisma.associacao.findUnique({
+					where: { id: id },
+					include: {
+						familiar: { select: { email: true, nome: true } },
+						internacao: {
+							// (NOVO) Inclui a internação
+							include: {
+								paciente: { select: { nome: true } }, // (NOVO) Inclui o paciente
+							},
+						},
+					},
+				})
+
+				const nomePaciente =
+					associacao?.internacao?.paciente?.nome || 'paciente'
+
+				if (associacao?.familiar && associacao.familiar.email) {
+					sendEmail({
+						to: associacao.familiar.email,
+						subject: `[InfoCare] Acesso APROVADO para ${nomePaciente}`,
+						html: `Olá, ${associacao.familiar.nome}.<br>Boas notícias! Sua solicitação de acesso ao paciente <b>${nomePaciente}</b> foi <b>aprovada</b>. Você já pode visualizar os dados no aplicativo.`,
+					})
+				}
+			} catch (emailError: any) {
+				console.error(
+					'[Email] Falha ao enviar e-mail de aprovação:',
+					emailError.message
+				)
+			}
 		} catch (error: any) {
 			if (error instanceof Prisma.PrismaClientKnownRequestError) {
 				if (error.code === 'P2025') {
-					// "Record to update not found."
 					return next(new Error('Solicitação de associação não encontrada.'))
 				}
 			}
@@ -193,17 +233,14 @@ associacaoRouter.put(
 )
 
 /**
- * (NOVA ROTA)
  * Rota: PUT /:id/rejeitar
- * Descrição: Profissional (logado) REJEITA uma solicitação de associação.
- * (PROTEGIDA: Apenas para Profissionais)
+ * Descrição: Profissional (logado) REJEITA uma solicitação.
  */
 associacaoRouter.put(
 	'/:id/rejeitar',
-	authMiddleware, // 1. Rota protegida
+	authMiddleware,
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			// 2. Verificamos se é um Profissional
 			if (req.usuario?.tipo !== 'profissional') {
 				const error = new Error(
 					'Acesso negado: Rota apenas para profissionais.'
@@ -212,19 +249,49 @@ associacaoRouter.put(
 				return next(error)
 			}
 
-			// 3. Validamos o ID da associação (da URL)
 			const { id } = getAssociacaoByIdSchema.parse(req.params)
 
-			// 4. Lógica de Banco (Atualizar)
 			const associacaoRejeitada = await prisma.associacao.update({
 				where: { id: id },
 				data: {
-					status: 'rejeitada', // MUDAMOS O STATUS
+					status: 'rejeitada',
 				},
 			})
 
-			// 5. Resposta
-			return res.status(200).json(associacaoRejeitada)
+			// Resposta imediata
+			res.status(200).json(associacaoRejeitada)
+
+			// (NOVO) Enviar e-mail (com nome do paciente)
+			try {
+				const associacao = await prisma.associacao.findUnique({
+					where: { id: id },
+					include: {
+						familiar: { select: { email: true, nome: true } },
+						internacao: {
+							// (NOVO) Inclui a internação
+							include: {
+								paciente: { select: { nome: true } }, // (NOVO) Inclui o paciente
+							},
+						},
+					},
+				})
+
+				const nomePaciente =
+					associacao?.internacao?.paciente?.nome || 'paciente'
+
+				if (associacao?.familiar && associacao.familiar.email) {
+					sendEmail({
+						to: associacao.familiar.email,
+						subject: `[InfoCare] Acesso REJEITADO para ${nomePaciente}`,
+						html: `Olá, ${associacao.familiar.nome}.<br>Sua solicitação de acesso ao paciente <b>${nomePaciente}</b> foi <b>rejeitada</b>. Entre em contato com a administração do hospital para mais detalhes.`,
+					})
+				}
+			} catch (emailError: any) {
+				console.error(
+					'[Email] Falha ao enviar e-mail de rejeição:',
+					emailError.message
+				)
+			}
 		} catch (error: any) {
 			if (error instanceof Prisma.PrismaClientKnownRequestError) {
 				if (error.code === 'P2025') {
@@ -237,17 +304,14 @@ associacaoRouter.put(
 )
 
 /**
- * (NOVA ROTA)
  * Rota: DELETE /:id
- * Descrição: Profissional (logado) APAGA uma Solicitação de Associação.
- * (PROTEGIDA: Apenas para Profissionais)
+ * Descrição: Profissional (logado) APAGA uma Solicitação.
  */
 associacaoRouter.delete(
 	'/:id',
-	authMiddleware, // 1. Protegemos
+	authMiddleware,
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			// 2. Verificamos se é um Profissional
 			if (req.usuario?.tipo !== 'profissional') {
 				const error = new Error(
 					'Acesso negado: Rota apenas para profissionais.'
@@ -256,15 +320,12 @@ associacaoRouter.delete(
 				return next(error)
 			}
 
-			// 3. Validamos o ID da Associação (da URL)
 			const { id } = getAssociacaoByIdSchema.parse(req.params)
 
-			// 4. Lógica de Banco (Apagar)
 			await prisma.associacao.delete({
 				where: { id: id },
 			})
 
-			// 5. Resposta
 			return res.status(200).json({
 				status: 'sucesso',
 				message: 'Solicitação de associação apagada.',

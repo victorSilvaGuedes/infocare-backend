@@ -26,7 +26,11 @@
 		},
 		{
 			"name": "Internações",
-			"description": "Gestão de Internações e Evoluções"
+			"description": "Gestão de Internações"
+		},
+		{
+			"name": "Evoluções",
+			"description": "Gestão de evoluções diárias"
 		},
 		{
 			"name": "Associações",
@@ -413,7 +417,7 @@
 		},
 		"/evolucoes": {
 			"post": {
-				"tags": ["Internações"],
+				"tags": ["Evoluções"],
 				"summary": "Adiciona uma nova evolução a uma internação (🔒 Profissional)",
 				"security": [{ "bearerAuth": [] }],
 				"requestBody": {
@@ -433,7 +437,7 @@
 		},
 		"/evolucoes/{id}": {
 			"delete": {
-				"tags": ["Internações"],
+				"tags": ["Evoluções"],
 				"summary": "Apaga uma evolução (🔒 Profissional)",
 				"security": [{ "bearerAuth": [] }],
 				"parameters": [

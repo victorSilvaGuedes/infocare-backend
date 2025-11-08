@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "TipoProfissional" AS ENUM ('MEDICO', 'ENFERMEIRO', 'TECNICO_ENFERMAGEM', 'FISIOTERAPEUTA', 'NUTRICIONISTA', 'PSICOLOGO', 'OUTRO');
+
+-- AlterTable
+ALTER TABLE "ProfissionaisSaude" ADD COLUMN     "tipo" "TipoProfissional" NOT NULL DEFAULT 'OUTRO';

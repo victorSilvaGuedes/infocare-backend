@@ -1,4 +1,5 @@
 // Salve este arquivo como: prisma/schema.prisma
+// (Versão ATUALIZADA - Sem idFamiliar na Internacao)
 
 generator client {
   provider = "prisma-client-js"
@@ -12,23 +13,24 @@ datasource db {
 
 // --- Enums ---
 
-// Enum para o status do pedido de associação do Familiar
 enum StatusAssociacao {
   pendente
   aprovada
   rejeitada
 }
 
-// Enum para o status da Internação (o que você perguntou)
 enum StatusInternacao {
   ATIVA
   ALTA
 }
 
-// Enum para os tipos de profissionais
 enum TipoProfissional {
   MEDICO
   ENFERMEIRO
+  TECNICO_ENFERMAGEM
+  FISIOTERAPEUTA
+  NUTRICIONISTA
+  PSICOLOGO
   OUTRO
 }
 
@@ -42,7 +44,6 @@ model Paciente {
   dataNascimento DateTime @map("data_nascimento") @db.Date
   tipoSanguineo  String?  @map("tipo_sanguineo") @db.VarChar(5)
 
-  // Relação: Um paciente pode ter várias internações
   internacoes Internacao[]
 
   @@map("Pacientes")
@@ -57,79 +58,68 @@ model Familiar {
   senha    String  @db.VarChar(255)
 
   // Relações:
-  internacoesResponsaveis Internacao[] // Internações onde ele é o responsável
-  associacoesSolicitadas  Associacao[] // Pedidos de associação que ele fez
+  // A relação 'internacoesResponsaveis' foi REMOVIDA
+  associacoesSolicitadas Associacao[]
 
   @@map("Familiares")
 }
 
 model ProfissionalSaude {
-  id       Int     @id @default(autoincrement()) @map("id_profissional")
-  nome     String  @db.VarChar(255)
-  cpf      String  @unique @db.VarChar(14)
-  telefone String? @db.VarChar(20)
-  email    String  @unique @db.VarChar(255)
-  senha    String  @db.VarChar(255)
+  id       Int              @id @default(autoincrement()) @map("id_profissional")
+  nome     String           @db.VarChar(255)
+  cpf      String           @unique @db.VarChar(14)
+  telefone String?          @db.VarChar(20)
+  email    String           @unique @db.VarChar(255)
+  senha    String           @db.VarChar(255)
+  crm      String?          @unique @db.VarChar(20)
+  coren    String?          @unique @db.VarChar(20)
+  tipo     TipoProfissional @default(OUTRO)
 
-  crm           String?          @unique @db.VarChar(20)
-  coren         String?          @unique @db.VarChar(20)
-  especialidade String?          @db.VarChar(100)
-  tipo          TipoProfissional @default(OUTRO)
-
-  // Relações:
-  internacoesResponsaveis Internacao[] @relation("ProfissionalResponsavel") // (NOVO)
-  evolucoes               Evolucao[] // Evoluções que este profissional escreveu
+  internacoesResponsaveis Internacao[] @relation("ProfissionalResponsavel")
+  evolucoes               Evolucao[]
 
   @@map("ProfissionaisSaude")
 }
 
 model Internacao {
-  id         Int  @id @default(autoincrement()) @map("id_internacao")
-  idPaciente Int  @map("id_paciente")
-  idFamiliar Int? @map("id_familiar") // Familiar principal (definido na entrada)
+  id         Int @id @default(autoincrement()) @map("id_internacao")
+  idPaciente Int @map("id_paciente")
 
-  // (NOVO) Profissional responsável pela internação
+  // O campo 'idFamiliar' foi REMOVIDO
+  // idFamiliar  Int?      @map("id_familiar") 
+
   idProfissionalResponsavel Int? @map("id_profissional_responsavel")
 
   dataInicio  DateTime         @default(now()) @map("data_inicio") @db.Timestamp()
-  dataAlta    DateTime?        @map("data_alta") @db.Timestamp() // Data de encerramento
+  dataAlta    DateTime?        @map("data_alta") @db.Timestamp()
   diagnostico String?          @db.Text
   observacoes String?          @db.Text
-  status      StatusInternacao @default(ATIVA) // ATIVA ou ALTA
+  status      StatusInternacao @default(ATIVA)
 
-  // (NOVOS) Campos de localização
   quarto String? @db.VarChar(50)
   leito  String? @db.VarChar(50)
 
   // Relações
-  paciente Paciente  @relation(fields: [idPaciente], references: [id], onDelete: Cascade)
-  familiar Familiar? @relation(fields: [idFamiliar], references: [id], onDelete: SetNull)
+  paciente Paciente @relation(fields: [idPaciente], references: [id], onDelete: Cascade)
 
-  // (NOVA) Relação com o profissional responsável
+  // A relação 'familiar' foi REMOVIDA
+  // familiar Familiar? @relation(fields: [idFamiliar], references: [id], onDelete: SetNull)
+
   profissionalResponsavel ProfissionalSaude? @relation("ProfissionalResponsavel", fields: [idProfissionalResponsavel], references: [id], onDelete: SetNull)
 
-  evolucoes   Evolucao[] // Lista de evoluções
-  associacoes Associacao[] // Lista de familiares associados
+  evolucoes   Evolucao[]
+  associacoes Associacao[]
 
   @@map("Internacoes")
 }
 
 model Evolucao {
-  id             Int  @id @default(autoincrement()) @map("id_evolucao")
-  idInternacao   Int  @map("id_internacao")
-  idProfissional Int? @map("id_profissional")
+  id             Int      @id @default(autoincrement()) @map("id_evolucao")
+  idInternacao   Int      @map("id_internacao")
+  idProfissional Int?     @map("id_profissional")
+  dataHora       DateTime @default(now()) @map("data_hora") @db.Timestamp()
+  descricao      String   @db.Text
 
-  // --- A MUDANÇA ESTÁ AQUI ---
-  // 1. Vamos renomear 'dataEvolucao' para 'dataHora'
-  // 2. Vamos mudar o tipo de '@db.Date' para '@db.Timestamp()'
-  dataHora DateTime @default(now()) @map("data_hora") @db.Timestamp()
-
-  // 3. Vamos REMOVER o campo 'horario' (é redundante)
-  // horario        DateTime @default(now()) @db.Time() // <--- APAGUE ESTA LINHA
-
-  descricao String @db.Text
-
-  // Relações
   internacao   Internacao         @relation(fields: [idInternacao], references: [id], onDelete: Cascade)
   profissional ProfissionalSaude? @relation(fields: [idProfissional], references: [id], onDelete: SetNull)
 
@@ -138,12 +128,11 @@ model Evolucao {
 
 model Associacao {
   id              Int              @id @default(autoincrement()) @map("id_associacao")
-  idFamiliar      Int              @map("id_familiar") // O familiar que está a pedir
-  idInternacao    Int              @map("id_internacao") // A internação que ele quer ver
+  idFamiliar      Int              @map("id_familiar")
+  idInternacao    Int              @map("id_internacao")
   dataSolicitacao DateTime         @default(now()) @map("data_solicitacao") @db.Timestamp()
   status          StatusAssociacao @default(pendente)
 
-  // Relações
   familiar   Familiar   @relation(fields: [idFamiliar], references: [id], onDelete: Cascade)
   internacao Internacao @relation(fields: [idInternacao], references: [id], onDelete: Cascade)
 

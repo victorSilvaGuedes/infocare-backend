@@ -1,49 +1,50 @@
 // Salve este arquivo como: src/routes/profissional.routes.ts
+// (Versão ATUALIZADA - Sem 'especialidade')
 
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
-import { Prisma, TipoProfissional } from '@prisma/client' // Importamos o Enum
+import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma'
-import bcrypt from 'bcrypt'
+import { hash, compare } from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import { authMiddleware } from '../middlewares/authMiddleware'
 
-// --- SCHEMAS ZOD ---
+// --- Schemas Zod ---
 
-// Schema para CRIAR um Profissional (POST /)
 const createProfissionalSchema = z.object({
-	nome: z.string().min(3, { message: 'Nome deve ter no mínimo 3 caracteres.' }),
-	cpf: z
-		.string()
-		.length(14, { message: 'CPF deve estar no formato xxx.xxx.xxx-xx' }),
-	email: z.email({ message: 'Formato de email inválido.' }),
-	senha: z
-		.string()
-		.min(8, { message: 'A senha deve ter no mínimo 8 caracteres.' }),
+	nome: z.string().min(3),
+	cpf: z.string().length(14),
+	email: z.string().email(),
+	senha: z.string().min(6),
 
-	// Campos específicos de Profissional
-	telefone: z.string().optional(),
+	tipo: z.enum([
+		'MEDICO',
+		'ENFERMEIRO',
+		'TECNICO_ENFERMAGEM',
+		'FISIOTERAPEUTA',
+		'NUTRICIONISTA',
+		'PSICOLOGO',
+		'OUTRO',
+	]),
+
 	crm: z.string().optional(),
 	coren: z.string().optional(),
-	especialidade: z.string().optional(),
-	tipo: z.nativeEnum(TipoProfissional).default(TipoProfissional.OUTRO), // Valida contra o Enum
+	// O campo 'especialidade' foi REMOVIDO daqui
 })
 
-// Schema para ATUALIZAR um Profissional (PUT /:id)
+const loginProfissionalSchema = z.object({
+	email: z.string().email(),
+	senha: z.string(),
+})
+
 const updateProfissionalSchema = z.object({
 	nome: z.string().min(3).optional(),
 	email: z.email().optional(),
 	telefone: z.string().optional().or(z.literal('')),
-	especialidade: z.string().optional(),
+	// O campo 'especialidade' foi REMOVIDO daqui
 })
 
-// Schema para LOGIN (Idêntico ao do Familiar)
-const loginSchema = z.object({
-	email: z.email({ message: 'Email inválido.' }),
-	senha: z.string().min(1, { message: 'Senha é obrigatória.' }),
-})
-
-// Select de Segurança (para não retornar a senha)
+// --- Select (para não expor a senha) ---
 const profissionalSelect = {
 	id: true,
 	nome: true,
@@ -52,48 +53,40 @@ const profissionalSelect = {
 	telefone: true,
 	crm: true,
 	coren: true,
-	especialidade: true,
 	tipo: true,
+	// O campo 'especialidade' foi REMOVIDO daqui
 }
 
-// --- CRIAÇÃO DO ROTEADOR ---
+// --- Roteador ---
 const profissionalRouter = Router()
-
-// --- ROTAS ---
 
 /**
  * Rota: POST /
- * Descrição: Regista (cadastra) um novo Profissional de Saúde.
+ * Descrição: Regista um novo profissional.
  */
 profissionalRouter.post(
 	'/',
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
 			const validatedData = createProfissionalSchema.parse(req.body)
-
-			// Hashear a senha
-			const senhaHash = await bcrypt.hash(validatedData.senha, 10)
-
+			const senhaHash = await hash(validatedData.senha, 10)
 			const profissional = await prisma.profissionalSaude.create({
 				data: {
 					...validatedData,
-					senha: senhaHash, // Salva o hash
+					senha: senhaHash,
 				},
-				select: profissionalSelect, // Não retorna a senha
+				select: profissionalSelect,
 			})
-
 			return res.status(201).json(profissional)
 		} catch (error: any) {
-			if (
-				error instanceof Prisma.PrismaClientKnownRequestError &&
-				error.code === 'P2002'
-			) {
-				// Trata erros de campo único (CPF, Email, CRM, Coren)
-				return next(
-					new Error(
-						`Já existe um registo com este valor. (Campos: ${error.meta?.target})`
+			if (error instanceof Prisma.PrismaClientKnownRequestError) {
+				if (error.code === 'P2002') {
+					return next(
+						new Error(
+							'Já existe um usuário com este CPF, E-mail, CRM ou Coren.'
+						)
 					)
-				)
+				}
 			}
 			return next(error)
 		}
@@ -102,48 +95,32 @@ profissionalRouter.post(
 
 /**
  * Rota: POST /login
- * Descrição: Autentica (loga) um Profissional de Saúde.
+ * Descrição: Autentica um profissional.
  */
 profissionalRouter.post(
 	'/login',
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			const { email, senha } = loginSchema.parse(req.body)
-
-			// Busca o profissional no banco
+			const { email, senha } = loginProfissionalSchema.parse(req.body)
 			const profissional = await prisma.profissionalSaude.findUnique({
-				where: { email: email },
+				where: { email },
 			})
 
-			// 1. Verifica se existe
 			if (!profissional) {
 				throw new Error('Credenciais inválidas.')
 			}
 
-			// 2. Compara a senha
-			const senhaCorreta = await bcrypt.compare(senha, profissional.senha)
-			if (!senhaCorreta) {
+			const senhaValida = await compare(senha, profissional.senha)
+			if (!senhaValida) {
 				throw new Error('Credenciais inválidas.')
 			}
 
-			// 3. Gera o Token JWT
-			const jwtSecret = process.env.JWT_SECRET
-			if (!jwtSecret) {
-				throw new Error('Segredo JWT não configurado no servidor.')
-			}
-
 			const token = jwt.sign(
-				{
-					sub: profissional.id,
-					tipo: 'profissional', // IMPORTANTE: O tipo agora é 'profissional'
-				},
-				jwtSecret,
-				{
-					expiresIn: '1d',
-				}
+				{ sub: profissional.id, tipo: 'profissional' },
+				process.env.JWT_SECRET as string,
+				{ expiresIn: '7d' }
 			)
 
-			// 4. Resposta de sucesso
 			return res.status(200).json({
 				message: 'Login bem-sucedido!',
 				token: token,
@@ -151,10 +128,11 @@ profissionalRouter.post(
 					id: profissional.id,
 					nome: profissional.nome,
 					email: profissional.email,
-					tipo: profissional.tipo,
+					tipo: 'profissional',
 				},
 			})
 		} catch (error: any) {
+			error.statusCode = 401
 			return next(error)
 		}
 	}
@@ -162,19 +140,14 @@ profissionalRouter.post(
 
 /**
  * Rota: GET /me
- * Descrição: Busca os dados do Profissional LOGADO (para validar o token/sessão).
+ * Descrição: Retorna o perfil do profissional logado.
  */
 profissionalRouter.get(
 	'/me',
 	authMiddleware,
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			if (!req.usuario) {
-				throw new Error('Usuário não autenticado.')
-			}
-
-			// Verificação de tipo (Autorização)
-			if (req.usuario.tipo !== 'profissional') {
+			if (req.usuario?.tipo !== 'profissional') {
 				const error = new Error(
 					'Acesso negado: Rota apenas para profissionais.'
 				)
@@ -182,11 +155,10 @@ profissionalRouter.get(
 				return next(error)
 			}
 
-			const idDoProfissional = req.usuario.sub
-
+			const profissionalId = req.usuario.sub
 			const profissional = await prisma.profissionalSaude.findUnique({
-				where: { id: idDoProfissional },
-				select: profissionalSelect, // Usa o select seguro
+				where: { id: profissionalId },
+				select: profissionalSelect,
 			})
 
 			if (!profissional) {
@@ -194,7 +166,6 @@ profissionalRouter.get(
 				;(error as any).statusCode = 404
 				return next(error)
 			}
-
 			return res.status(200).json(profissional)
 		} catch (error: any) {
 			return next(error)
@@ -203,17 +174,14 @@ profissionalRouter.get(
 )
 
 /**
- * (NOVA ROTA)
  * Rota: PUT /me
  * Descrição: Profissional (logado) atualiza os seus PRÓPRIOS dados.
- * (PROTEGIDA: Apenas para Profissionais)
  */
 profissionalRouter.put(
 	'/me',
-	authMiddleware, // 1. Protegemos a rota
+	authMiddleware,
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			// 2. Verificamos se é um Profissional
 			if (req.usuario?.tipo !== 'profissional') {
 				const error = new Error(
 					'Acesso negado: Rota apenas para profissionais.'
@@ -221,14 +189,9 @@ profissionalRouter.put(
 				;(error as any).statusCode = 403
 				return next(error)
 			}
-
-			// 3. Pegamos o ID do Profissional (do token)
 			const idProfissionalLogado = req.usuario.sub
-
-			// 4. Validamos os dados do body
 			const validatedData = updateProfissionalSchema.parse(req.body)
 
-			// 5. Garantimos que não enviou um body vazio
 			if (Object.keys(validatedData).length === 0) {
 				return res.status(400).json({
 					status: 'error',
@@ -236,34 +199,28 @@ profissionalRouter.put(
 				})
 			}
 
-			// 6. Lógica de Banco (Atualizar)
 			const profissionalAtualizado = await prisma.profissionalSaude.update({
 				where: { id: idProfissionalLogado },
 				data: validatedData,
-				select: profissionalSelect, // Retorna os dados seguros (sem senha)
+				select: profissionalSelect,
 			})
 
-			// 7. Resposta
 			return res.status(200).json(profissionalAtualizado)
 		} catch (error: any) {
-			// O errorHandler já trata erros P2002 (email/cpf duplicado)
 			return next(error)
 		}
 	}
 )
 
 /**
- * (NOVA ROTA)
  * Rota: DELETE /me
  * Descrição: Profissional (logado) APAGA a sua própria conta.
- * (PROTEGIDA: Apenas para Profissionais)
  */
 profissionalRouter.delete(
 	'/me',
-	authMiddleware, // 1. Protegemos
+	authMiddleware,
 	async (req: Request, res: Response, next: NextFunction) => {
 		try {
-			// 2. Verificamos se é um Profissional
 			if (req.usuario?.tipo !== 'profissional') {
 				const error = new Error(
 					'Acesso negado: Rota apenas para profissionais.'
@@ -271,22 +228,17 @@ profissionalRouter.delete(
 				;(error as any).statusCode = 403
 				return next(error)
 			}
-
-			// 3. Pegamos o ID do Profissional (do token)
 			const idProfissionalLogado = req.usuario.sub
 
-			// 4. Lógica de Banco (Apagar)
 			await prisma.profissionalSaude.delete({
 				where: { id: idProfissionalLogado },
 			})
 
-			// 5. Resposta
 			return res.status(200).json({
 				status: 'sucesso',
 				message: 'Conta de profissional apagada.',
 			})
 		} catch (error: any) {
-			// P2025: Profissional já foi apagado ou não existe
 			if (
 				error instanceof Prisma.PrismaClientKnownRequestError &&
 				error.code === 'P2025'
