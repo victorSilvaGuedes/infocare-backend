@@ -5,10 +5,11 @@
 	"main": "index.js",
 	"scripts": {
 		"dev": "npx tsx watch src/server.ts",
-		"db:migrate": "prisma migrate dev",
+		"db:migrate": "npx prisma migrate dev",
 		"build": "npx prisma generate && npx tsc",
-		"start": "node dist/server.js"
-	},
+		"migrate:deploy": "npx prisma migrate deploy",
+		"start": "npm run migrate:deploy && node dist/server.js"
+},
 	"keywords": [],
 	"author": "",
 	"license": "ISC",
