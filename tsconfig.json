@@ -1,29 +1,24 @@
 {
 	"compilerOptions": {
 		/* ----- Configuração Base do Módulo ----- */
-		"target": "ES2020", // Compila para uma versão moderna do JavaScript
-		"module": "commonjs", // Usa o sistema de módulos do Node.js (require/exports)
-		"lib": ["ES2020"], // Bibliotecas padrão do JS a incluir
-		"esModuleInterop": true, // Permite compatibilidade entre 'require' e 'import'
-		"forceConsistentCasingInFileNames": true, // Garante que os nomes dos ficheiros sejam consistentes
+		"target": "ES2020",
+		"module": "commonjs",
+		"lib": ["ES2020", "DOM"], // ✅ Adiciona DOM para habilitar 'console' e outras globals
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
 		"resolveJsonModule": true,
 
 		/* ----- Caminhos de Saída e Raiz ----- */
-		"rootDir": "./src", // Onde o seu código TypeScript (.ts) vive
-		// "outDir": "./dist",            // (Opcional) Onde o JavaScript (.js) compilado irá
+		"rootDir": "./src",
+		"outDir": "./dist",
 
-		/* ----- Verificações Rigorosas (Melhores Práticas) ----- */
-		"strict": true, // Ativa todas as verificações rigorosas de tipo
-		"skipLibCheck": true, // Pula a verificação de tipos dos 'node_modules' (mais rápido)
+		/* ----- Verificações Rigorosas ----- */
+		"strict": true,
+		"skipLibCheck": true,
 
-		"outDir": "./dist", // Onde o JavaScript (.js) compilado irá
-
-		/* ----- Para o authMiddleware funcionar ----- */
-		// Diz ao TypeScript onde encontrar definições de tipo
-		"typeRoots": [
-			"./node_modules/@types", // Os tipos padrão
-			"./src/types" // A nossa pasta customizada
-		]
+		/* ----- Tipos Globais ----- */
+		"types": ["node"], // ✅ Adiciona suporte a process, __dirname etc.
+		"typeRoots": ["./node_modules/@types", "./src/types"]
 	},
 
 	/* ----- O MAIS IMPORTANTE (O Conserto) ----- */
