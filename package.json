@@ -5,7 +5,9 @@
 	"main": "index.js",
 	"scripts": {
 		"dev": "npx tsx watch src/server.ts",
-		"db:migrate": "prisma migrate dev"
+		"db:migrate": "prisma migrate dev",
+		"build": "prisma generate && tsc",
+		"start": "node dist/server.js"
 	},
 	"keywords": [],
 	"author": "",

@@ -16,6 +16,8 @@
 		"strict": true, // Ativa todas as verificações rigorosas de tipo
 		"skipLibCheck": true, // Pula a verificação de tipos dos 'node_modules' (mais rápido)
 
+		"outDir": "./dist", // Onde o JavaScript (.js) compilado irá
+
 		/* ----- Para o authMiddleware funcionar ----- */
 		// Diz ao TypeScript onde encontrar definições de tipo
 		"typeRoots": [
