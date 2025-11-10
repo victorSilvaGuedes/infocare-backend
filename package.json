@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "npx tsx watch src/server.ts",
 		"db:migrate": "prisma migrate dev",
-		"build": "prisma generate && tsc",
+		"build": "npx prisma generate && npx tsc",
 		"start": "node dist/server.js"
 	},
 	"keywords": [],
