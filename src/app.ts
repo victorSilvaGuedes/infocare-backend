@@ -11,6 +11,7 @@ import associacaoRouter from './routes/associacao.routes'
 
 import swaggerUi from 'swagger-ui-express'
 import * as swaggerDocument from '../swagger.json'
+import utilRouter from './routes/utils.routes'
 
 const app: Express = express()
 
@@ -32,6 +33,7 @@ app.use('/profissionais', profissionalRouter)
 app.use('/internacoes', internacaoRouter)
 app.use('/evolucoes', evolucaoRouter)
 app.use('/associacoes', associacaoRouter)
+app.use('/util', utilRouter)
 
 app.use(errorHandler)
 
