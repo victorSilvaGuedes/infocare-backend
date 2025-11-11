@@ -4,12 +4,12 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "npx prisma generate && npx tsc",
-    "start": "npx prisma migrate deploy && node dist/server.js",
-    "db:migrate": "prisma migrate dev --name",
-    "db:deploy": "prisma migrate deploy"
-  },
+		"dev": "tsx watch src/server.ts",
+		"build": "npx prisma generate && npx tsc",
+		"start": "npx prisma migrate deploy && node dist/server.js",
+		"db:migrate": "prisma migrate dev --name",
+		"db:deploy": "prisma migrate deploy"
+	},
 	"keywords": [],
 	"author": "",
 	"license": "ISC",
@@ -23,7 +23,7 @@
 		"express": "^5.1.0",
 		"jsonwebtoken": "^9.0.2",
 		"multer": "^2.0.2",
-		"nodemailer": "^7.0.10",
+		"resend": "^6.4.2",
 		"swagger-jsdoc": "^6.2.8",
 		"swagger-ui-express": "^5.0.1",
 		"zod": "^4.1.12"
@@ -35,7 +35,6 @@
 		"@types/jsonwebtoken": "^9.0.10",
 		"@types/multer": "^2.0.0",
 		"@types/node": "^24.9.2",
-		"@types/nodemailer": "^7.0.3",
 		"@types/swagger-ui-express": "^4.1.8",
 		"prisma": "^6.18.0",
 		"tsx": "^4.20.6",

@@ -67,10 +67,6 @@ export const transcribeAudio = async (
 	}
 
 	try {
-		console.log(
-			`[GeminiService] Processando áudio de ${mimeType}, tamanho: ${audioBuffer.length} bytes.`
-		)
-
 		// 5. Preparar o áudio (Buffer -> Base64)
 		const audioBase64 = audioBuffer.toString('base64')
 
@@ -97,7 +93,6 @@ export const transcribeAudio = async (
 		const response = result.response
 		const transcricao = response.text()
 
-		console.log('[GeminiService] Transcrição concluída.')
 		return transcricao
 	} catch (error: any) {
 		console.error('[GeminiService] Falha ao transcrever áudio:', error.message)
