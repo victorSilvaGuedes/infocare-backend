@@ -1,15 +1,14 @@
 // Salve este arquivo como: src/routes/associacao.routes.ts
-// (Versão ATUALIZADA - Com nome do Paciente nos e-mails)
+// (Versão REATORADA - E-mails agora são "bloqueantes")
 
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { Prisma, StatusAssociacao } from '@prisma/client'
 import prisma from '../lib/prisma'
 import { authMiddleware } from '../middlewares/authMiddleware'
-import { sendEmail } from '../services/email.service' // Importa o serviço de e-mail
+import { sendEmail } from '../services/email.service'
 
 // --- SCHEMAS ZOD ---
-
 const createAssociacaoSchema = z.object({
 	idInternacao: z
 		.number()
@@ -48,13 +47,13 @@ associacaoRouter.post(
 			const idFamiliarLogado = req.usuario.sub
 			const { idInternacao } = createAssociacaoSchema.parse(req.body)
 
+			// ... (Verificação de duplicidade, inalterada) ...
 			const jaExiste = await prisma.associacao.findFirst({
 				where: {
 					idFamiliar: idFamiliarLogado,
 					idInternacao: idInternacao,
 				},
 			})
-
 			if (jaExiste) {
 				return next(
 					new Error(
@@ -63,45 +62,49 @@ associacaoRouter.post(
 				)
 			}
 
+			// ======================================================
+			// (A MUDANÇA - PARTE 1)
+			// Agora criamos E incluímos os dados para o e-mail
+			// em UMA SÓ CHAMADA de banco de dados.
+			// ======================================================
 			const novaAssociacao = await prisma.associacao.create({
 				data: {
 					idFamiliar: idFamiliarLogado,
 					idInternacao: idInternacao,
 					status: 'pendente',
 				},
+				include: {
+					familiar: { select: { email: true, nome: true } },
+					internacao: { include: { paciente: { select: { nome: true } } } },
+				},
 			})
 
-			// Resposta imediata para o usuário
-			res.status(201).json(novaAssociacao)
-
-			// (NOVO) Enviar e-mail (com nome do paciente)
+			// ======================================================
+			// (A MUDANÇA - PARTE 2)
+			// Enviamos o e-mail ANTES de responder ao frontend.
+			// ======================================================
 			try {
-				const familiar = await prisma.familiar.findUnique({
-					where: { id: idFamiliarLogado },
-					select: { email: true, nome: true },
-				})
-
-				// (NOVO) Busca a internação para pegar o nome do paciente
-				const internacao = await prisma.internacao.findUnique({
-					where: { id: idInternacao },
-					include: { paciente: { select: { nome: true } } },
-				})
-
-				const nomePaciente = internacao?.paciente?.nome || 'paciente'
+				const nomePaciente = novaAssociacao.internacao.paciente.nome
+				const familiar = novaAssociacao.familiar
 
 				if (familiar && familiar.email) {
-					sendEmail({
+					await sendEmail({
 						to: familiar.email,
 						subject: `[InfoCare] Solicitação de acesso para ${nomePaciente}`,
 						html: `Olá, ${familiar.nome}.<br>Sua solicitação de acesso à internação do paciente <b>${nomePaciente}</b> foi registrada e está <b>pendente</b> de aprovação.`,
 					})
 				}
 			} catch (emailError: any) {
+				// Se o e-mail falhar, nós registamos o erro, mas NÃO
+				// impedimos a solicitação de ser criada.
 				console.error(
 					'[Email] Falha ao enviar e-mail de solicitação:',
 					emailError.message
 				)
 			}
+
+			// 3. Resposta de Sucesso (AGORA é a última coisa)
+			res.status(201).json(novaAssociacao)
 		} catch (error: any) {
 			if (error instanceof Prisma.PrismaClientKnownRequestError) {
 				if (error.code === 'P2003') {
@@ -119,6 +122,7 @@ associacaoRouter.post(
  * Rota: GET /
  * Descrição: Lista todas as solicitações de associação (Apenas Profissionais).
  */
+// (Esta rota não foi alterada)
 associacaoRouter.get(
 	'/',
 	authMiddleware,
@@ -135,9 +139,7 @@ associacaoRouter.get(
 			const { status } = getAssociacoesSchema.parse(req.query)
 
 			const associacoes = await prisma.associacao.findMany({
-				where: {
-					status: status,
-				},
+				where: { status: status },
 				include: {
 					familiar: {
 						select: { id: true, nome: true, email: true },
@@ -145,15 +147,13 @@ associacaoRouter.get(
 					internacao: {
 						select: {
 							id: true,
-							diagnostico: true, // <-- ADICIONE ISTO
-							dataInicio: true, // <-- ADICIONE ISTO
+							diagnostico: true,
+							dataInicio: true,
 							paciente: { select: { nome: true } },
 						},
 					},
 				},
-				orderBy: {
-					dataSolicitacao: 'asc',
-				},
+				orderBy: { dataSolicitacao: 'asc' },
 			})
 
 			return res.status(200).json(associacoes)
@@ -182,54 +182,50 @@ associacaoRouter.put(
 
 			const { id } = getAssociacaoByIdSchema.parse(req.params)
 
+			// ======================================================
+			// (A MUDANÇA - PARTE 1)
+			// O 'update' agora INCLUI os dados do familiar e paciente.
+			// (Não precisamos mais de um segundo 'findUnique')
+			// ======================================================
 			const associacaoAprovada = await prisma.associacao.update({
 				where: { id: id },
 				data: {
 					status: 'aprovada',
 				},
-			})
-
-			// Resposta imediata
-			res.status(200).json(associacaoAprovada)
-
-			// (NOVO) Enviar e-mail (com nome do paciente)
-			try {
-				const associacao = await prisma.associacao.findUnique({
-					where: { id: id },
-					include: {
-						familiar: { select: { email: true, nome: true } },
-						internacao: {
-							// (NOVO) Inclui a internação
-							include: {
-								paciente: { select: { nome: true } }, // (NOVO) Inclui o paciente
-							},
+				include: {
+					familiar: { select: { email: true, nome: true } },
+					internacao: {
+						include: {
+							paciente: { select: { nome: true } },
 						},
 					},
+				},
+			})
+
+			// ======================================================
+			// (A MUDANÇA - PARTE 2)
+			// Enviamos o e-mail ANTES de responder ao frontend.
+			// ======================================================
+			const nomePaciente = associacaoAprovada.internacao.paciente.nome
+			const familiar = associacaoAprovada.familiar
+
+			if (familiar && familiar.email) {
+				await sendEmail({
+					to: familiar.email,
+					subject: `[InfoCare] Acesso APROVADO para ${nomePaciente}`,
+					html: `Olá, ${familiar.nome}.<br>Boas notícias! Sua solicitação de acesso ao paciente <b>${nomePaciente}</b> foi <b>aprovada</b>. Você já pode visualizar os dados no aplicativo.`,
 				})
-
-				const nomePaciente =
-					associacao?.internacao?.paciente?.nome || 'paciente'
-
-				if (associacao?.familiar && associacao.familiar.email) {
-					sendEmail({
-						to: associacao.familiar.email,
-						subject: `[InfoCare] Acesso APROVADO para ${nomePaciente}`,
-						html: `Olá, ${associacao.familiar.nome}.<br>Boas notícias! Sua solicitação de acesso ao paciente <b>${nomePaciente}</b> foi <b>aprovada</b>. Você já pode visualizar os dados no aplicativo.`,
-					})
-				}
-			} catch (emailError: any) {
-				console.error(
-					'[Email] Falha ao enviar e-mail de aprovação:',
-					emailError.message
-				)
 			}
-		} catch (error: any) {
-			if (error instanceof Prisma.PrismaClientKnownRequestError) {
-				if (error.code === 'P2025') {
-					return next(new Error('Solicitação de associação não encontrada.'))
-				}
-			}
-			return next(error)
+
+			// 3. Resposta de Sucesso (AGORA é a última coisa)
+			res.status(200).json(associacaoAprovada)
+		} catch (emailError: any) {
+			// Se o envio do e-mail falhar, o frontend agora saberá do erro
+			console.error(
+				'[Email] Falha ao enviar e-mail de aprovação:',
+				emailError.message
+			)
+			return next(new Error('Falha ao enviar o e-mail de notificação.'))
 		}
 	}
 )
@@ -253,54 +249,48 @@ associacaoRouter.put(
 
 			const { id } = getAssociacaoByIdSchema.parse(req.params)
 
+			// ======================================================
+			// (A MUDANÇA - PARTE 1)
+			// O 'update' agora INCLUI os dados do familiar e paciente.
+			// ======================================================
 			const associacaoRejeitada = await prisma.associacao.update({
 				where: { id: id },
 				data: {
 					status: 'rejeitada',
 				},
-			})
-
-			// Resposta imediata
-			res.status(200).json(associacaoRejeitada)
-
-			// (NOVO) Enviar e-mail (com nome do paciente)
-			try {
-				const associacao = await prisma.associacao.findUnique({
-					where: { id: id },
-					include: {
-						familiar: { select: { email: true, nome: true } },
-						internacao: {
-							// (NOVO) Inclui a internação
-							include: {
-								paciente: { select: { nome: true } }, // (NOVO) Inclui o paciente
-							},
+				include: {
+					familiar: { select: { email: true, nome: true } },
+					internacao: {
+						include: {
+							paciente: { select: { nome: true } },
 						},
 					},
+				},
+			})
+
+			// ======================================================
+			// (A MUDANÇA - PARTE 2)
+			// Enviamos o e-mail ANTES de responder ao frontend.
+			// ======================================================
+			const nomePaciente = associacaoRejeitada.internacao.paciente.nome
+			const familiar = associacaoRejeitada.familiar
+
+			if (familiar && familiar.email) {
+				await sendEmail({
+					to: familiar.email,
+					subject: `[InfoCare] Acesso REJEITADO para ${nomePaciente}`,
+					html: `Olá, ${familiar.nome}.<br>Sua solicitação de acesso ao paciente <b>${nomePaciente}</b> foi <b>rejeitada</b>. Entre em contato com a administração do hospital para mais detalhes.`,
 				})
-
-				const nomePaciente =
-					associacao?.internacao?.paciente?.nome || 'paciente'
-
-				if (associacao?.familiar && associacao.familiar.email) {
-					sendEmail({
-						to: associacao.familiar.email,
-						subject: `[InfoCare] Acesso REJEITADO para ${nomePaciente}`,
-						html: `Olá, ${associacao.familiar.nome}.<br>Sua solicitação de acesso ao paciente <b>${nomePaciente}</b> foi <b>rejeitada</b>. Entre em contato com a administração do hospital para mais detalhes.`,
-					})
-				}
-			} catch (emailError: any) {
-				console.error(
-					'[Email] Falha ao enviar e-mail de rejeição:',
-					emailError.message
-				)
 			}
-		} catch (error: any) {
-			if (error instanceof Prisma.PrismaClientKnownRequestError) {
-				if (error.code === 'P2025') {
-					return next(new Error('Solicitação de associação não encontrada.'))
-				}
-			}
-			return next(error)
+
+			// 3. Resposta de Sucesso (AGORA é a última coisa)
+			res.status(200).json(associacaoRejeitada)
+		} catch (emailError: any) {
+			console.error(
+				'[Email] Falha ao enviar e-mail de rejeição:',
+				emailError.message
+			)
+			return next(new Error('Falha ao enviar o e-mail de notificação.'))
 		}
 	}
 )
@@ -309,6 +299,7 @@ associacaoRouter.put(
  * Rota: DELETE /:id
  * Descrição: Profissional (logado) APAGA uma Solicitação.
  */
+// (Esta rota não foi alterada)
 associacaoRouter.delete(
 	'/:id',
 	authMiddleware,
