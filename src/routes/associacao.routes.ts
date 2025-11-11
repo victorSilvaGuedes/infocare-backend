@@ -145,6 +145,8 @@ associacaoRouter.get(
 					internacao: {
 						select: {
 							id: true,
+							diagnostico: true, // <-- ADICIONE ISTO
+							dataInicio: true, // <-- ADICIONE ISTO
 							paciente: { select: { nome: true } },
 						},
 					},
