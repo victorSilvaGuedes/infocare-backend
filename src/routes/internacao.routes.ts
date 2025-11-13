@@ -181,7 +181,7 @@ internacaoRouter.get(
 					},
 					// 'familiar: true' REMOVIDO daqui
 					profissionalResponsavel: {
-						select: { nome: true, tipo: true },
+						select: { nome: true },
 					},
 				},
 				orderBy: { dataInicio: 'desc' },
@@ -239,15 +239,12 @@ internacaoRouter.get(
 				where: { id: idInternacao },
 				include: {
 					paciente: true,
-
-					// 'familiar: true' REMOVIDO daqui
-
 					profissionalResponsavel: true,
 					evolucoes: {
 						orderBy: { dataHora: 'desc' },
 						include: {
 							profissional: {
-								select: { nome: true, tipo: true },
+								select: { nome: true },
 							},
 						},
 					},

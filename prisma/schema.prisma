@@ -24,7 +24,7 @@ enum StatusInternacao {
   ALTA
 }
 
-enum TipoProfissional {
+enum Especialidade {
   MEDICO
   ENFERMEIRO
   TECNICO_ENFERMAGEM
@@ -65,15 +65,15 @@ model Familiar {
 }
 
 model ProfissionalSaude {
-  id       Int              @id @default(autoincrement()) @map("id_profissional")
-  nome     String           @db.VarChar(255)
-  cpf      String           @unique @db.VarChar(14)
-  telefone String?          @db.VarChar(20)
-  email    String           @unique @db.VarChar(255)
-  senha    String           @db.VarChar(255)
-  crm      String?          @unique @db.VarChar(20)
-  coren    String?          @unique @db.VarChar(20)
-  tipo     TipoProfissional @default(OUTRO)
+  id            Int           @id @default(autoincrement()) @map("id_profissional")
+  nome          String        @db.VarChar(255)
+  cpf           String        @unique @db.VarChar(14)
+  telefone      String?       @db.VarChar(20)
+  email         String        @unique @db.VarChar(255)
+  senha         String        @db.VarChar(255)
+  crm           String?       @unique @db.VarChar(20)
+  coren         String?       @unique @db.VarChar(20)
+  especialidade Especialidade @default(OUTRO) // enum com cargo/especialidade
 
   internacoesResponsaveis Internacao[] @relation("ProfissionalResponsavel")
   evolucoes               Evolucao[]

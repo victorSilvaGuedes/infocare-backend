@@ -1,5 +1,5 @@
 // Salve este arquivo como: src/routes/profissional.routes.ts
-// (Versão ATUALIZADA - Sem 'especialidade')
+// (Versão ATUALIZADA - com campo "especialidade" e tipo fixo "profissional")
 
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
@@ -16,8 +16,10 @@ const createProfissionalSchema = z.object({
 	cpf: z.string().length(14),
 	email: z.string().email(),
 	senha: z.string().min(6),
-
-	tipo: z.enum([
+	telefone: z.string().optional().or(z.literal('')).or(z.null()),
+	crm: z.string().optional().or(z.literal('')).or(z.null()),
+	coren: z.string().optional().or(z.literal('')).or(z.null()),
+	especialidade: z.enum([
 		'MEDICO',
 		'ENFERMEIRO',
 		'TECNICO_ENFERMAGEM',
@@ -26,10 +28,6 @@ const createProfissionalSchema = z.object({
 		'PSICOLOGO',
 		'OUTRO',
 	]),
-
-	crm: z.string().optional(),
-	coren: z.string().optional(),
-	// O campo 'especialidade' foi REMOVIDO daqui
 })
 
 const loginProfissionalSchema = z.object({
@@ -39,9 +37,21 @@ const loginProfissionalSchema = z.object({
 
 const updateProfissionalSchema = z.object({
 	nome: z.string().min(3).optional(),
-	email: z.email().optional(),
-	telefone: z.string().optional().or(z.literal('')),
-	// O campo 'especialidade' foi REMOVIDO daqui
+	email: z.string().email().optional(),
+	telefone: z.string().optional().or(z.literal('')).or(z.null()),
+	crm: z.string().optional().or(z.literal('')).or(z.null()),
+	coren: z.string().optional().or(z.literal('')).or(z.null()),
+	especialidade: z
+		.enum([
+			'MEDICO',
+			'ENFERMEIRO',
+			'TECNICO_ENFERMAGEM',
+			'FISIOTERAPEUTA',
+			'NUTRICIONISTA',
+			'PSICOLOGO',
+			'OUTRO',
+		])
+		.optional(),
 })
 
 // --- Select (para não expor a senha) ---
@@ -53,8 +63,7 @@ const profissionalSelect = {
 	telefone: true,
 	crm: true,
 	coren: true,
-	tipo: true,
-	// O campo 'especialidade' foi REMOVIDO daqui
+	especialidade: true,
 }
 
 // --- Roteador ---
@@ -62,7 +71,7 @@ const profissionalRouter = Router()
 
 /**
  * Rota: POST /
- * Descrição: Regista um novo profissional.
+ * Descrição: Registra um novo profissional de saúde.
  */
 profissionalRouter.post(
 	'/',
@@ -70,6 +79,7 @@ profissionalRouter.post(
 		try {
 			const validatedData = createProfissionalSchema.parse(req.body)
 			const senhaHash = await hash(validatedData.senha, 10)
+
 			const profissional = await prisma.profissionalSaude.create({
 				data: {
 					...validatedData,
@@ -77,6 +87,7 @@ profissionalRouter.post(
 				},
 				select: profissionalSelect,
 			})
+
 			return res.status(201).json(profissional)
 		} catch (error: any) {
 			if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -123,12 +134,13 @@ profissionalRouter.post(
 
 			return res.status(200).json({
 				message: 'Login bem-sucedido!',
-				token: token,
+				token,
 				usuario: {
 					id: profissional.id,
 					nome: profissional.nome,
 					email: profissional.email,
-					tipo: 'profissional',
+					tipo: 'profissional', // mantém compatibilidade com frontend
+					especialidade: profissional.especialidade,
 				},
 			})
 		} catch (error: any) {
@@ -175,7 +187,7 @@ profissionalRouter.get(
 
 /**
  * Rota: PUT /me
- * Descrição: Profissional (logado) atualiza os seus PRÓPRIOS dados.
+ * Descrição: Profissional (logado) atualiza seus próprios dados.
  */
 profissionalRouter.put(
 	'/me',
@@ -189,6 +201,7 @@ profissionalRouter.put(
 				;(error as any).statusCode = 403
 				return next(error)
 			}
+
 			const idProfissionalLogado = req.usuario.sub
 			const validatedData = updateProfissionalSchema.parse(req.body)
 
@@ -214,7 +227,7 @@ profissionalRouter.put(
 
 /**
  * Rota: DELETE /me
- * Descrição: Profissional (logado) APAGA a sua própria conta.
+ * Descrição: Profissional (logado) apaga a própria conta.
  */
 profissionalRouter.delete(
 	'/me',
@@ -228,6 +241,7 @@ profissionalRouter.delete(
 				;(error as any).statusCode = 403
 				return next(error)
 			}
+
 			const idProfissionalLogado = req.usuario.sub
 
 			await prisma.profissionalSaude.delete({

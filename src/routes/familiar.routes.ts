@@ -1,8 +1,10 @@
 // Salve este arquivo como: src/routes/familiar.routes.ts
+// (Versão COMPLETA E ATUALIZADA)
 
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
-import { Prisma } from '@prisma/client'
+// 1. (ATUALIZADO) Importar 'Prisma' e 'StatusAssociacao'
+import { Prisma, StatusAssociacao } from '@prisma/client'
 import prisma from '../lib/prisma'
 import { hash, compare } from 'bcrypt'
 import jwt from 'jsonwebtoken'
@@ -25,15 +27,21 @@ const loginFamiliarSchema = z.object({
 
 const updateFamiliarSchema = z.object({
 	nome: z.string().min(3).optional(),
-	email: z.email().optional(),
-	telefone: z
-		.string()
-		.regex(/^\+\d{1,3}\d{10,14}$/)
-		.optional()
-		.or(z.literal('')),
+	email: z.string().email().optional(),
+	telefone: z.string().optional().or(z.literal('')),
 })
 
 const getFamiliarByIdSchema = z.object({
+	id: z.coerce.number().int().positive(),
+})
+
+// 2. (NOVO) Schema para o filtro de status (usando o enum importado)
+const getMinhasAssociacoesSchema = z.object({
+	status: z.nativeEnum(StatusAssociacao).optional(), // <-- Corrigido
+})
+
+// 3. (NOVO) Schema para a nova rota de detalhes
+const getAssociacaoByIdSchema = z.object({
 	id: z.coerce.number().int().positive(),
 })
 
@@ -53,6 +61,7 @@ const familiarRouter = Router()
  * Rota: POST /
  * Descrição: Regista um novo familiar.
  */
+// (código da rota POST /... sem alteração)
 familiarRouter.post(
 	'/',
 	async (req: Request, res: Response, next: NextFunction) => {
@@ -65,10 +74,9 @@ familiarRouter.post(
 					...validatedData,
 					senha: senhaHash,
 				},
-				select: familiarSelect, // Usamos o select para ter o e-mail de volta
+				select: familiarSelect,
 			})
 
-			// --- (NOVO) GATILHO DE E-MAIL DE BOAS-VINDAS ---
 			try {
 				await sendEmail({
 					to: familiar.email,
@@ -80,15 +88,12 @@ familiarRouter.post(
 					`[Email] Falha ao enviar e-mail de boas-vindas para ${familiar.email}:`,
 					emailError.message
 				)
-				// Não bloquear a resposta principal por causa de falha no e-mail
 			}
-			// --- FIM DO NOVO BLOCO ---
 
 			return res.status(201).json(familiar)
 		} catch (error: any) {
 			if (error instanceof Prisma.PrismaClientKnownRequestError) {
 				if (error.code === 'P2002') {
-					// A mensagem de erro está correta (CPF ou E-mail)
 					return next(new Error('Já existe um usuário com este CPF ou E-mail.'))
 				}
 			}
@@ -101,6 +106,7 @@ familiarRouter.post(
  * Rota: POST /login
  * Descrição: Autentica um familiar.
  */
+// (código da rota POST /login... sem alteração)
 familiarRouter.post(
 	'/login',
 	async (req: Request, res: Response, next: NextFunction) => {
@@ -122,10 +128,9 @@ familiarRouter.post(
 			const token = jwt.sign(
 				{ sub: familiar.id, tipo: 'familiar' },
 				process.env.JWT_SECRET as string,
-				{ expiresIn: '7d' } // Token expira em 7 dias
+				{ expiresIn: '7d' }
 			)
 
-			// --- CORREÇÃO APLICADA AQUI ---
 			return res.status(200).json({
 				message: 'Login bem-sucedido!',
 				token: token,
@@ -133,12 +138,11 @@ familiarRouter.post(
 					id: familiar.id,
 					nome: familiar.nome,
 					email: familiar.email,
-					tipo: 'familiar', // O frontend espera esta string
+					tipo: 'familiar',
 				},
 			})
-			// --- FIM DA CORREÇÃO ---
 		} catch (error: any) {
-			error.statusCode = 401 // Erro de autenticação
+			error.statusCode = 401
 			return next(error)
 		}
 	}
@@ -148,6 +152,7 @@ familiarRouter.post(
  * Rota: GET /me
  * Descrição: Retorna o perfil do familiar logado.
  */
+// (código da rota GET /me... sem alteração)
 familiarRouter.get(
 	'/me',
 	authMiddleware,
@@ -177,10 +182,133 @@ familiarRouter.get(
 	}
 )
 
+// ==========================================================
+// --- (INÍCIO DAS NOVAS ROTAS / ROTAS ATUALIZADAS) ---
+// ==========================================================
+
+/**
+ * Rota: GET /me/associacoes
+ * Descrição: Retorna todas as associações (solicitações) do familiar logado.
+ * (ATUALIZADA para incluir o status da internação)
+ */
+familiarRouter.get(
+	'/me/associacoes',
+	authMiddleware,
+	async (req: Request, res: Response, next: NextFunction) => {
+		try {
+			if (req.usuario?.tipo !== 'familiar') {
+				const error = new Error('Acesso negado: Rota apenas para familiares.')
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+
+			const idFamiliarLogado = req.usuario.sub
+			const { status } = getMinhasAssociacoesSchema.parse(req.query)
+
+			const where: Prisma.AssociacaoWhereInput = {
+				idFamiliar: idFamiliarLogado,
+			}
+			if (status) {
+				where.status = status
+			}
+
+			const associacoes = await prisma.associacao.findMany({
+				where: where,
+				include: {
+					internacao: {
+						select: {
+							id: true,
+							diagnostico: true,
+							dataInicio: true,
+							status: true, // <-- (ATUALIZADO) Adicionado para a badge
+							paciente: { select: { nome: true } },
+						},
+					},
+				},
+				orderBy: {
+					dataSolicitacao: 'desc',
+				},
+			})
+
+			return res.status(200).json(associacoes)
+		} catch (error: any) {
+			return next(error)
+		}
+	}
+)
+
+/**
+ * Rota: GET /me/associacoes/:id
+ * Descrição: Retorna UMA associação (e os detalhes da internação)
+ * (NOVA ROTA)
+ */
+familiarRouter.get(
+	'/me/associacoes/:id',
+	authMiddleware,
+	async (req: Request, res: Response, next: NextFunction) => {
+		try {
+			if (req.usuario?.tipo !== 'familiar') {
+				const error = new Error('Acesso negado: Rota apenas para familiares.')
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+			const idFamiliarLogado = req.usuario.sub
+			const { id } = getAssociacaoByIdSchema.parse(req.params)
+
+			const associacao = await prisma.associacao.findUnique({
+				where: {
+					id: id,
+					idFamiliar: idFamiliarLogado, // Garante que o familiar só veja a sua
+				},
+				include: {
+					internacao: {
+						include: {
+							paciente: true,
+							profissionalResponsavel: { select: { nome: true } },
+							// Inclui as evoluções para a página de detalhes
+							evolucoes: {
+								orderBy: { dataHora: 'desc' },
+								include: {
+									profissional: { select: { nome: true } },
+								},
+							},
+						},
+					},
+				},
+			})
+
+			if (!associacao) {
+				const error = new Error('Associação não encontrada.')
+				;(error as any).statusCode = 404
+				return next(error)
+			}
+
+			// Regra de Segurança: O familiar só pode ver os detalhes
+			// de uma associação que foi APROVADA.
+			if (associacao.status !== 'aprovada') {
+				const error = new Error(
+					'Acesso negado. A associação não está aprovada.'
+				)
+				;(error as any).statusCode = 403
+				return next(error)
+			}
+
+			return res.status(200).json(associacao)
+		} catch (error: any) {
+			return next(error)
+		}
+	}
+)
+
+// ==========================================================
+// --- (FIM DAS NOVAS ROTAS / ROTAS ATUALIZADAS) ---
+// ==========================================================
+
 /**
  * Rota: PUT /me
  * Descrição: Familiar (logado) atualiza os seus PRÓPRIOS dados.
  */
+// (código da rota PUT /me... sem alteração)
 familiarRouter.put(
 	'/me',
 	authMiddleware,
@@ -218,6 +346,7 @@ familiarRouter.put(
  * Rota: DELETE /me
  * Descrição: Familiar (logado) APAGA a sua própria conta.
  */
+// (código da rota DELETE /me... sem alteração)
 familiarRouter.delete(
 	'/me',
 	authMiddleware,
@@ -254,6 +383,7 @@ familiarRouter.delete(
  * Rota: GET /
  * Descrição: Lista todos os familiares (Apenas para Profissionais).
  */
+// (código da rota GET /... sem alteração)
 familiarRouter.get(
 	'/',
 	authMiddleware,
@@ -280,6 +410,7 @@ familiarRouter.get(
  * Rota: GET /:id
  * Descrição: Busca um familiar específico (Apenas para Profissionais).
  */
+// (código da rota GET /:id... sem alteração)
 familiarRouter.get(
 	'/:id',
 	authMiddleware,

@@ -29,10 +29,6 @@ const associacaoRouter = Router()
 
 // --- ROTAS ---
 
-/**
- * Rota: POST /
- * Descrição: Familiar (logado) solicita associação com uma internação.
- */
 associacaoRouter.post(
 	'/',
 	authMiddleware,
@@ -47,7 +43,22 @@ associacaoRouter.post(
 			const idFamiliarLogado = req.usuario.sub
 			const { idInternacao } = createAssociacaoSchema.parse(req.body)
 
-			// ... (Verificação de duplicidade, inalterada) ...
+			// --- Verifica se a internação existe ---
+			const internacaoExiste = await prisma.internacao.findUnique({
+				where: { id: idInternacao },
+				select: {
+					id: true,
+					paciente: { select: { nome: true } },
+				},
+			})
+
+			if (!internacaoExiste) {
+				const error = new Error('Internação não encontrada com o ID fornecido.')
+				;(error as any).statusCode = 404
+				return next(error)
+			}
+
+			// --- Verifica se já existe associação ---
 			const jaExiste = await prisma.associacao.findFirst({
 				where: {
 					idFamiliar: idFamiliarLogado,
@@ -55,18 +66,14 @@ associacaoRouter.post(
 				},
 			})
 			if (jaExiste) {
-				return next(
-					new Error(
-						`Você já enviou uma solicitação para esta internação (Status: ${jaExiste.status}).`
-					)
+				const error = new Error(
+					`Você já enviou uma solicitação para esta internação (Status: ${jaExiste.status}).`
 				)
+				;(error as any).statusCode = 400
+				return next(error)
 			}
 
-			// ======================================================
-			// (A MUDANÇA - PARTE 1)
-			// Agora criamos E incluímos os dados para o e-mail
-			// em UMA SÓ CHAMADA de banco de dados.
-			// ======================================================
+			// --- Cria a nova associação ---
 			const novaAssociacao = await prisma.associacao.create({
 				data: {
 					idFamiliar: idFamiliarLogado,
@@ -79,38 +86,30 @@ associacaoRouter.post(
 				},
 			})
 
-			// ======================================================
-			// (A MUDANÇA - PARTE 2)
-			// Enviamos o e-mail ANTES de responder ao frontend.
-			// ======================================================
-			try {
-				const nomePaciente = novaAssociacao.internacao.paciente.nome
-				const familiar = novaAssociacao.familiar
+			// --- Envia o e-mail (sem travar a requisição) ---
+			const nomePaciente = internacaoExiste.paciente.nome
+			const familiar = novaAssociacao.familiar
 
-				if (familiar && familiar.email) {
-					await sendEmail({
-						to: familiar.email,
-						subject: `[InfoCare] Solicitação de acesso para ${nomePaciente}`,
-						html: `Olá, ${familiar.nome}.<br>Sua solicitação de acesso à internação do paciente <b>${nomePaciente}</b> foi registrada e está <b>pendente</b> de aprovação.`,
-					})
-				}
-			} catch (emailError: any) {
-				// Se o e-mail falhar, nós registamos o erro, mas NÃO
-				// impedimos a solicitação de ser criada.
-				console.error(
-					'[Email] Falha ao enviar e-mail de solicitação:',
-					emailError.message
-				)
+			if (familiar && familiar.email) {
+				sendEmail({
+					to: familiar.email,
+					subject: `[InfoCare] Solicitação de acesso para ${nomePaciente}`,
+					html: `Olá, ${familiar.nome}.<br>Sua solicitação de acesso à internação do paciente <b>${nomePaciente}</b> foi registrada e está <b>pendente</b> de aprovação.`,
+				}).catch(() => {
+					// não faz nada — apenas ignora erro silenciosamente
+				})
 			}
 
-			// 3. Resposta de Sucesso (AGORA é a última coisa)
+			// --- Retorna sucesso ---
 			res.status(201).json(novaAssociacao)
 		} catch (error: any) {
 			if (error instanceof Prisma.PrismaClientKnownRequestError) {
 				if (error.code === 'P2003') {
-					return next(
-						new Error('Internação não encontrada com o ID fornecido.')
+					const customError = new Error(
+						'Internação não encontrada com o ID fornecido.'
 					)
+					;(customError as any).statusCode = 404
+					return next(customError)
 				}
 			}
 			return next(error)
